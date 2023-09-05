@@ -35,7 +35,7 @@ class GenomicDataSet(Dataset):
             for record in seq_records:
                 if not(record.id in normal_chromosomes) or not(record.id in chromosomes): continue
                 self.chr_seq[record.id] = str(record.seq)
-            reference_genome = pd.DataFrame({"Chromosome": self.chr_seq.keys(), "Start": [0]*len(self.chr_seq.keys()), "End": [len(self.chr_seq[x]) for x in self.chr_seq.keys()]})
+            reference_genome = pd.DataFrame({"Chromosome": self.chr_seq.keys(), "Start": [100_000]*len(self.chr_seq.keys()), "End": [len(self.chr_seq[x]) for x in self.chr_seq.keys()]})
             return reference_genome
         
     def prepare_windows(self, reference_genome):
@@ -65,26 +65,27 @@ class GenomicDataSet(Dataset):
 
     def __getitem__(self, idx):
         window = self.windows.iloc[idx]
-        sequence = self.chr_seq[window["Chromosome"]][window["Start"]:window["End"]]
+        length_to_2 = 97152 # correction for input to network - easier to ooperate whith maxpooling when ^2
+        sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_2/2):window["End"]+int(length_to_2/2)]
         return self.sequence_to_onehot(sequence), self.get_interactions_in_window(window)
 
     def sequence_to_onehot(self, sequence):
         sequence = re.sub(unwanted_chars, "N", sequence).replace("A", "0").replace("C", "1").replace("T", "2").replace("G", "3").replace("N", "4")
         sequence_list = list(sequence)
         sequence_list_int = list(map(int, sequence_list))
-        sequence_encoding = Fun.one_hot(torch.Tensor(sequence_list_int).to(torch.int64))
-        return sequence_encoding
+        sequence_encoding = Fun.one_hot(torch.Tensor(sequence_list_int).to(torch.int64), 5).to(torch.float)
+        return torch.transpose(sequence_encoding, 0, 1)
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 32):
+    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 4):
         super().__init__()
         self.bedpe_file = bedpe_file
         self.reference_genome_file = reference_genome_file
         self.bed_exclude = bed_exclude
         self.batch_size = batch_size
 
-    def setup(self):
+    def setup(self, stage=None):
         self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]])
         self.genomic_test = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, ["chr9"])
 
