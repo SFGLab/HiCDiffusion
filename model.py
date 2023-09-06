@@ -3,14 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
+batch_size = 8
+
 class Interaction3DPredictor(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.conv_blocks = nn.ModuleList([])
         self.conv_trans_blocks = nn.ModuleList([])
-        channels_in = [5, 32, 32, 32, 64, 64, 64, 64, 128, 128, 256, 256, 256]
-        channels_out = [32, 32, 32, 64, 64, 64, 64, 128, 128, 256, 256, 256, 512]
-        for i in range(0, 13):
+        channels_in = [5, 32, 32, 32, 64, 64, 64, 64, 128, 128, 256, 256, 256, 256]
+        channels_out = [32, 32, 32, 64, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256]
+        for i in range(0, 14):
             if(i % 2 == 0):
                 self.conv_blocks.append(nn.Sequential(nn.Conv1d(channels_in[i], channels_out[i], 5, padding=2),
                                                 nn.ReLU(),
@@ -18,25 +20,24 @@ class Interaction3DPredictor(pl.LightningModule):
             else:
                 self.conv_blocks.append(nn.Sequential(nn.Conv1d(channels_in[i], channels_out[i], 5, padding=2),
                                                 nn.ReLU()))
-        for i in range(0, 12):
-            self.conv_trans_blocks.append(nn.Sequential(nn.ConvTranspose2d(channels_out[-i-1], channels_in[-i-1], 5, padding=2),
+        #for i in range(0, 13):
+        self.conv_trans_blocks.append(nn.Sequential(nn.ConvTranspose2d(256, 32, 2, stride=2),
                                                 nn.ReLU()))
         
-        self.conv_trans_blocks.append(nn.Sequential(nn.ConvTranspose2d(5, 1, 5),
+        self.conv_trans_blocks.append(nn.Sequential(nn.ConvTranspose2d(32, 1, 2, stride=2),
                                                 nn.ReLU()))
-        self.fc1 = nn.Linear(1, 1)
-        #self.fc2 = nn.Linear(485376, 160000)
-        #self.fc3 = nn.Linear(262144, 160000)
+        
+        self.conv_trans_blocks.append(nn.Sequential(nn.Conv2d(1, 1, 113),
+                                                nn.ReLU()))
 
     def forward(self, x):
         for block in self.conv_blocks:
             x = block(x)
+        x = x.view(batch_size, 256, 128, 128)
         for block in self.conv_trans_blocks:
             x = block(x)
-        x = self.fc1(x)
-        #x = self.fc2(x)
-        #x = self.fc3(x)
-        return torch.reshape(x, (400, 400))
+        x = x.view(batch_size, 400, 400)
+        return x
 
     def training_step(self, batch, batch_idx):
         x, y = batch

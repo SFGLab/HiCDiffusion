@@ -58,7 +58,7 @@ class GenomicDataSet(Dataset):
         interactions_changed_coords = pd.DataFrame({"x": ((interactions["pos1"]-window["Start"])/output_res).astype(int), "y": ((interactions["pos2"]-window["Start"])/output_res).astype(int), "score": interactions["score"]})
         for _, row in interactions_changed_coords.iterrows():
             output_vector[row["x"], row["y"]] = row["score"]
-        return torch.Tensor(output_vector).to(torch.int64)
+        return torch.Tensor(output_vector).to(torch.float)
 
     def __len__(self):
         return len(self.windows)
@@ -78,7 +78,7 @@ class GenomicDataSet(Dataset):
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 4):
+    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 8):
         super().__init__()
         self.bedpe_file = bedpe_file
         self.reference_genome_file = reference_genome_file
