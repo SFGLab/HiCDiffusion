@@ -35,7 +35,7 @@ class GenomicDataSet(Dataset):
             for record in seq_records:
                 if not(record.id in normal_chromosomes) or not(record.id in chromosomes): continue
                 self.chr_seq[record.id] = str(record.seq)
-            reference_genome = pd.DataFrame({"Chromosome": self.chr_seq.keys(), "Start": [100_000]*len(self.chr_seq.keys()), "End": [len(self.chr_seq[x]) for x in self.chr_seq.keys()]})
+            reference_genome = pd.DataFrame({"Chromosome": self.chr_seq.keys(), "Start": [100_000]*len(self.chr_seq.keys()), "End": [len(self.chr_seq[x])-100_000 for x in self.chr_seq.keys()]})
             return reference_genome
         
     def prepare_windows(self, reference_genome):

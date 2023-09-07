@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
-batch_size = 8
-
 class Interaction3DPredictor(pl.LightningModule):
     def __init__(self):
         super().__init__()
@@ -33,10 +31,10 @@ class Interaction3DPredictor(pl.LightningModule):
     def forward(self, x):
         for block in self.conv_blocks:
             x = block(x)
-        x = x.view(batch_size, 256, 128, 128)
+        x = x.view(-1, 256, 128, 128)
         for block in self.conv_trans_blocks:
             x = block(x)
-        x = x.view(batch_size, 400, 400)
+        x = x.view(-1, 400, 400)
         return x
 
     def training_step(self, batch, batch_idx):
