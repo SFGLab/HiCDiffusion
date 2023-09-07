@@ -5,11 +5,11 @@ from model import Interaction3DPredictor
 
 
 def main(args=None):
-    genomic_data_module = datasets.GenomicDataModule("hg00512_CTCF_pooled.5k.2.sig3Dinteractions.bedpe", "/mnt/raid/GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed")
+    genomic_data_module = datasets.GenomicDataModule("hg00512_CTCF_pooled.5k.2.sig3Dinteractions.bedpe", "GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed")
 
     model = Interaction3DPredictor()
+    #trainer = pl.Trainer(accelerator="gpu", devices=2, num_nodes=2, strategy="ddp")
     trainer = pl.Trainer()
-    #trainer = Trainer(accelerator="gpu", devices=8, num_nodes=4, strategy="ddp")
     trainer.fit(model, genomic_data_module)
 
 

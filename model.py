@@ -29,8 +29,13 @@ class Interaction3DPredictor(pl.LightningModule):
                                                 nn.ReLU()))
 
     def forward(self, x):
+        i = 0
         for block in self.conv_blocks:
+            if(i % 2 == 0):
+                x_prev = x
             x = block(x)
+            if(i % 2 == 1):
+                x += x_prev
         x = x.view(-1, 256, 128, 128)
         for block in self.conv_trans_blocks:
             x = block(x)
@@ -42,6 +47,16 @@ class Interaction3DPredictor(pl.LightningModule):
         y_hat = self(x)
         loss = F.cross_entropy(y_hat, y)
         return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = F.cross_entropy(y_hat, y)
+        self.log("val_loss", loss, sync_dist=True)
+        mae = torch.nn.L1Loss()
+        mse = torch.nn.MSELoss()
+        self.log("mae", mae(y_hat, y), sync_dist=True)
+        self.log("mse", mse(y_hat, y), sync_dist=True)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.02)
