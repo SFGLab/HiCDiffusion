@@ -67,7 +67,7 @@ class GenomicDataSet(Dataset):
         window = self.windows.iloc[idx]
         length_to_2 = 48576 # correction for input to network - easier to ooperate whith maxpooling when ^2
         sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_2/2):window["End"]+int(length_to_2/2)]
-        return self.sequence_to_onehot(sequence), self.get_interactions_in_window(window)
+        return self.sequence_to_onehot(sequence), self.get_interactions_in_window(window), {"Chr": window["Chromosome"], "pos": window["Start"], "end": window["Start"]}
 
     def sequence_to_onehot(self, sequence):
         sequence = re.sub(unwanted_chars, "N", sequence).replace("A", "0").replace("C", "1").replace("T", "2").replace("G", "3").replace("N", "4")
@@ -78,7 +78,7 @@ class GenomicDataSet(Dataset):
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 2):
+    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 8):
         super().__init__()
         self.bedpe_file = bedpe_file
         self.reference_genome_file = reference_genome_file
@@ -86,17 +86,18 @@ class GenomicDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
 
     def setup(self, stage=None):
-        self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]])
+        #self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]])
+        self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, ["chr9"]) # overfitting scenario - just for tests
         self.genomic_val = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, ["chr9"])
 
     def train_dataloader(self):
-        return DataLoader(self.genomic_train, batch_size=self.batch_size)
+        return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=4)
 
     # def test_dataloader(self):
     #     return DataLoader(self.mnist_val, batch_size=self.batch_size)
     
-    # def predict_dataloader(self):
-    #     return DataLoader(self.mnist_predict, batch_size=self.batch_size)
+    def predict_dataloader(self):
+        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=4, shuffle=False)
 
     def val_dataloader(self):
         return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=4)
