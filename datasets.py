@@ -7,18 +7,20 @@ import torch
 import lightning.pytorch as pl
 import torch.nn.functional as Fun
 import re
-
+import math
 normal_chromosomes = ["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]
 window_size = 1_000_000
 slide_size = 100_000
 output_res = 5_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
-
+scaling_factor = 1000
 
 class GenomicDataSet(Dataset):
     def __init__(self, bedpe_file, reference_genome_file, bed_exclude, chromosomes):
-
-        self.bed_exclude = pr.PyRanges(pd.read_csv(bed_exclude, sep="\t", header=None, usecols=[*range(0, 3)], names=["Chromosome", "Start", "End"]))
+        bed_exclude_df = pd.read_csv(bed_exclude, sep="\t", header=None, usecols=[*range(0, 3)], names=["Chromosome", "Start", "End"])
+        bed_exclude_df["Start"] = ((bed_exclude_df["Start"]/output_res).apply(np.floor)*output_res).astype(int)
+        bed_exclude_df["End"] = ((bed_exclude_df["End"]/output_res).apply(np.ceil)*output_res).astype(int)
+        self.bed_exclude = pr.PyRanges(bed_exclude_df)
         self.interactions = pd.read_csv(bedpe_file, sep="\t", header=None, usecols=[*range(0, 7)], names=["chr1", "pos1", "end1", "chr2", "pos2", "end2", "score"])
 
         reference_genome = self.load_reference(reference_genome_file, chromosomes)
@@ -57,7 +59,7 @@ class GenomicDataSet(Dataset):
         output_vector = np.zeros((int(window_size/output_res), int(window_size/output_res)))
         interactions_changed_coords = pd.DataFrame({"x": ((interactions["pos1"]-window["Start"])/output_res).astype(int), "y": ((interactions["pos2"]-window["Start"])/output_res).astype(int), "score": interactions["score"]})
         for _, row in interactions_changed_coords.iterrows():
-            output_vector[row["x"], row["y"]] = row["score"]
+            output_vector[row["x"], row["y"]] = row["score"]*scaling_factor
         return torch.Tensor(output_vector).to(torch.float)
 
     def __len__(self):
@@ -67,7 +69,7 @@ class GenomicDataSet(Dataset):
         window = self.windows.iloc[idx]
         length_to_2 = 48576 # correction for input to network - easier to ooperate whith maxpooling when ^2
         sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_2/2):window["End"]+int(length_to_2/2)]
-        return self.sequence_to_onehot(sequence), self.get_interactions_in_window(window), {"Chr": window["Chromosome"], "pos": window["Start"], "end": window["Start"]}
+        return self.sequence_to_onehot(sequence), self.get_interactions_in_window(window), [window["Chromosome"], window["Start"], window["End"]]
 
     def sequence_to_onehot(self, sequence):
         sequence = re.sub(unwanted_chars, "N", sequence).replace("A", "0").replace("C", "1").replace("T", "2").replace("G", "3").replace("N", "4")
