@@ -47,9 +47,9 @@ def main(args=None):
                 plt.tight_layout()
                 plt.savefig("predictions/%s_%s_%s.png" % (real_chr, real_pos.item(), real_end.item()), dpi=400)
                 plt.cla()
-            for interaction in (real_data >= min_to_be_positive).nonzero(): # change real_data to prediction
+            for interaction in (prediction >= min_to_be_positive).nonzero(): # change real_data to prediction
                 interaction_real_starts = interaction*datasets.output_res+real_pos
-                all_interactions.append((real_chr, interaction_real_starts[0].item(), interaction_real_starts[0].item()+datasets.output_res, interaction_real_starts[1].item(), interaction_real_starts[1].item()+datasets.output_res, real_data[interaction[0].item(), interaction[1].item()].item()))
+                all_interactions.append((real_chr, interaction_real_starts[0].item(), interaction_real_starts[0].item()+datasets.output_res, interaction_real_starts[1].item(), interaction_real_starts[1].item()+datasets.output_res, prediction[interaction[0].item(), interaction[1].item()].item()))
     all_interactions_df = pd.DataFrame(all_interactions, columns=["chr", "pos1", "end1", "pos2", "end2", "score"])
     all_interactions_df = all_interactions_df.groupby(["chr", "pos1", "end1", "pos2", "end2"]).agg(count=('score', 'size'), mean=('score', 'mean')).reset_index()
     # optional - filter out based on count
