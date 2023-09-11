@@ -7,3 +7,4 @@ lightning_logs/
 *log
 *slurm
 *fa
+predictions/
