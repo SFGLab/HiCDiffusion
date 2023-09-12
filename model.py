@@ -6,13 +6,19 @@ from lightning.pytorch.utilities import grad_norm
 import math
 
 print_sizes = False
+
+# gradient is going down; need residual connections NOW
+
 class Interaction3DPredictor(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.example_input_array = torch.Tensor(16, 5, int(math.pow(2, 20)))
 
         self.conv_blocks = nn.ModuleList([])
+        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=8)
         self.conv_trans_blocks = nn.ModuleList([])
+
         channels_in = [5, 32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256]
         channels_out = [32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256]
         
@@ -21,7 +27,6 @@ class Interaction3DPredictor(pl.LightningModule):
                                             nn.BatchNorm1d(channels_out[i]),
                                             nn.ReLU(),
                                             nn.MaxPool1d(2)))
-                
         decoder_channels_in = [256, 128, 64, 16]
         decoder_channels_out = [128, 64, 16, 8]
         for i in range(0, 4):
@@ -32,6 +37,9 @@ class Interaction3DPredictor(pl.LightningModule):
     def forward(self, x):
         for block in self.conv_blocks:
             x = block(x)
+        
+        x = self.transformer_encoder(x)
+
         x = x.view(-1, 256, 16, 16)
         for block in self.conv_trans_blocks:
             x = block(x)

@@ -7,7 +7,7 @@ lightning_logs/
 *log
 *slurm
 *fa
-predictions/
+predictions*/
 tb_logs/
 Interaction3DPredictor/
 wandb/

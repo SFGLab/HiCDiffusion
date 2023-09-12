@@ -22,14 +22,14 @@ torch.set_float32_matmul_precision('medium')
 def main(args=None):
     genomic_data_module = datasets.GenomicDataModule("hg00512_CTCF_pooled.5k.2.sig3Dinteractions.bedpe", "GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed")
 
-    early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0, patience=1, verbose=False, mode="min")
+    early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0, patience=3, verbose=False, mode="min")
 
 
     model = Interaction3DPredictor()
     #trainer = pl.Trainer(accelerator="gpu", devices=2, num_nodes=2, strategy="ddp")
     logger = WandbLogger(project="Interaction3DPredictor", log_model=True)
-    trainer = pl.Trainer(gradient_clip_val=1, logger=logger, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), early_stop_callback])#, accumulate_grad_batches=8)
-    logger.watch(model, log="all")
+    trainer = pl.Trainer(gradient_clip_val=5, logger=logger, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), early_stop_callback])#, accumulate_grad_batches=8)
+    logger.watch(model, log="all", log_freq=10)
     trainer.fit(model, datamodule=genomic_data_module)
     if(predict):
         predictions = trainer.predict(ckpt_path='best', datamodule=genomic_data_module)

@@ -15,7 +15,7 @@ window_size = 1_000_000
 slide_size = 100_000
 output_res = 5_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
-scaling_factor = 1
+scaling_factor = 1_000_000
 num_workers_loader = 8
 
 class GenomicDataSet(Dataset):
