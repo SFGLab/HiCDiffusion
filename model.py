@@ -20,8 +20,9 @@ class Interaction3DPredictor(pl.LightningModule):
                 self.conv_blocks.append(nn.Sequential(nn.Conv1d(channels_in[i], channels_out[i], 3, padding=1),
                                                 nn.ReLU(),
                                                 nn.MaxPool1d(2)))
-        decoder_channels_in = [256, 128, 68, 16]
-        decoder_channels_out = [128, 68, 16, 8]
+                
+        decoder_channels_in = [256, 128, 64, 16]
+        decoder_channels_out = [128, 64, 16, 8]
         for i in range(0, 4):
             self.conv_trans_blocks.append(nn.Sequential(nn.ConvTranspose2d(decoder_channels_in[i], decoder_channels_out[i], 2, stride=2),
                                                 nn.ReLU()))
@@ -39,14 +40,14 @@ class Interaction3DPredictor(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y, _ = batch
         y_hat = self(x)
-        loss = F.cross_entropy(y_hat, y)
+        loss = torch.nn.MSELoss()
         mae = torch.nn.L1Loss()
         mse = torch.nn.MSELoss()
-        self.log("train_loss", loss, sync_dist=True, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss(y_hat, y), sync_dist=True, on_step=False, on_epoch=True, prog_bar=True)
         self.log("train_mae", mae(y_hat, y), sync_dist=True, on_step=False, on_epoch=True, prog_bar=True)
         self.log("train_mse", mse(y_hat, y), sync_dist=True, on_step=False, on_epoch=True, prog_bar=True)
 
-        return loss
+        return loss(y_hat, y)
     
     def on_train_epoch_end(self):
         print('\n')
@@ -54,8 +55,8 @@ class Interaction3DPredictor(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y, _ = batch
         y_hat = self(x)
-        loss = F.cross_entropy(y_hat, y)
-        self.log("val_loss", loss, sync_dist=True, prog_bar=True)
+        # loss = F.cross_entropy(y_hat, y)
+        # self.log("val_loss", loss, sync_dist=True, prog_bar=True)
         mae = torch.nn.L1Loss()
         mse = torch.nn.MSELoss()
         self.log("val_mae", mae(y_hat, y), sync_dist=True, prog_bar=True)
@@ -63,6 +64,14 @@ class Interaction3DPredictor(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         return self(batch[0])
-    
+
+    # Override LM hook
+    def on_before_optimizer_step(self, optimizer):
+        self.log_dict(grad_norm(self, norm_type=2))   
+        for k, v in self.named_parameters():
+            self.logger.experiment.add_histogram(
+                tag=k, values=v.grad, global_step=self.trainer.global_step
+            )
+
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.1)

@@ -14,6 +14,7 @@ slide_size = 100_000
 output_res = 5_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
 scaling_factor = 1000
+num_workers_loader = 8
 
 class GenomicDataSet(Dataset):
     def __init__(self, bedpe_file, reference_genome_file, bed_exclude, chromosomes):
@@ -93,13 +94,13 @@ class GenomicDataModule(pl.LightningDataModule):
         self.genomic_val = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, ["chr9"])
 
     def train_dataloader(self):
-        return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=num_workers_loader)
 
     # def test_dataloader(self):
     #     return DataLoader(self.mnist_val, batch_size=self.batch_size)
     
     def predict_dataloader(self):
-        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=4, shuffle=False)
+        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
 
     def val_dataloader(self):
-        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader)
