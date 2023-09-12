@@ -17,17 +17,18 @@ class Interaction3DPredictor(pl.LightningModule):
         channels_out = [32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256]
         
         for i in range(0, 12):
-                self.conv_blocks.append(nn.Sequential(nn.Conv1d(channels_in[i], channels_out[i], 3, padding=1),
-                                                nn.ReLU(),
-                                                nn.MaxPool1d(2)))
+            self.conv_blocks.append(nn.Sequential(nn.Conv1d(channels_in[i], channels_out[i], 3, padding=1),
+                                            nn.BatchNorm1d(channels_out[i]),
+                                            nn.ReLU(),
+                                            nn.MaxPool1d(2)))
                 
         decoder_channels_in = [256, 128, 64, 16]
         decoder_channels_out = [128, 64, 16, 8]
         for i in range(0, 4):
             self.conv_trans_blocks.append(nn.Sequential(nn.ConvTranspose2d(decoder_channels_in[i], decoder_channels_out[i], 2, stride=2),
+                                                nn.BatchNorm2d(decoder_channels_out[i]),
                                                 nn.ReLU()))
-        self.conv_trans_blocks.append(nn.Sequential(nn.Conv2d(8, 1, 59, padding=1),
-                                                nn.ReLU()))
+        self.conv_trans_blocks.append(nn.Sequential(nn.Conv2d(8, 1, 59, padding=1)))
     def forward(self, x):
         for block in self.conv_blocks:
             x = block(x)
@@ -65,13 +66,8 @@ class Interaction3DPredictor(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         return self(batch[0])
 
-    # Override LM hook
+    #Override LM hook
     def on_before_optimizer_step(self, optimizer):
-        self.log_dict(grad_norm(self, norm_type=2))   
-        for k, v in self.named_parameters():
-            self.logger.experiment.add_histogram(
-                tag=k, values=v.grad, global_step=self.trainer.global_step
-            )
-
+        pass
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.1)

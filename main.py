@@ -11,23 +11,25 @@ import shutil
 import pyranges as pr
 import pandas as pd
 from tqdm import tqdm
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import WandbLogger
+
 
 min_to_be_positive = 1
 produce_heatmaps = True
-predict = False
+predict = True
 torch.set_float32_matmul_precision('medium')
 
 def main(args=None):
     genomic_data_module = datasets.GenomicDataModule("hg00512_CTCF_pooled.5k.2.sig3Dinteractions.bedpe", "GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed")
 
-    early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0.0, patience=3, verbose=False, mode="min")
+    early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0, patience=1, verbose=False, mode="min")
 
 
     model = Interaction3DPredictor()
     #trainer = pl.Trainer(accelerator="gpu", devices=2, num_nodes=2, strategy="ddp")
-    logger = TensorBoardLogger("tb_logs", name="my_model")
-    trainer = pl.Trainer(log_every_n_steps=10, logger=logger, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), early_stop_callback])#, accumulate_grad_batches=8)
+    logger = WandbLogger(project="Interaction3DPredictor", log_model=True)
+    trainer = pl.Trainer(gradient_clip_val=1, logger=logger, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), early_stop_callback])#, accumulate_grad_batches=8)
+    logger.watch(model, log="all")
     trainer.fit(model, datamodule=genomic_data_module)
     if(predict):
         predictions = trainer.predict(ckpt_path='best', datamodule=genomic_data_module)
@@ -38,6 +40,7 @@ def main(args=None):
         for prediction_batch, real_data_batch in tqdm(zip(predictions, iter(genomic_data_module.predict_dataloader()))):
             for prediction, real_data, real_chr, real_pos, real_end in zip(prediction_batch, real_data_batch[1], real_data_batch[2][0], real_data_batch[2][1], real_data_batch[2][2]):
                 if(produce_heatmaps):
+                    pd.DataFrame(prediction).to_csv("predictions/%s_%s_%s.npy" % (real_chr, real_pos.item(), real_end.item()))
                     plt.subplot(1, 3, 1)
                     plt.suptitle('Output - %s %s:%s' % (real_chr, real_pos.item(), real_end.item()))
                     plt.gca().set_title('Predicted')
@@ -48,6 +51,7 @@ def main(args=None):
                     plt.subplot(1, 3, 3)
                     plt.gca().set_title('Difference')
                     plt.imshow(real_data-prediction, cmap='binary', interpolation='nearest')
+                    plt.colorbar()
                     plt.tight_layout()
                     plt.savefig("predictions/%s_%s_%s.png" % (real_chr, real_pos.item(), real_end.item()), dpi=400)
                     plt.cla()

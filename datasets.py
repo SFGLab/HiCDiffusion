@@ -8,12 +8,14 @@ import lightning.pytorch as pl
 import torch.nn.functional as Fun
 import re
 import math
+from scipy.ndimage.filters import gaussian_filter
+
 normal_chromosomes = ["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]
 window_size = 1_000_000
 slide_size = 100_000
 output_res = 5_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
-scaling_factor = 1000
+scaling_factor = 1
 num_workers_loader = 8
 
 class GenomicDataSet(Dataset):
@@ -61,6 +63,7 @@ class GenomicDataSet(Dataset):
         interactions_changed_coords = pd.DataFrame({"x": ((interactions["pos1"]-window["Start"])/output_res).astype(int), "y": ((interactions["pos2"]-window["Start"])/output_res).astype(int), "score": interactions["score"]})
         for _, row in interactions_changed_coords.iterrows():
             output_vector[row["x"], row["y"]] = row["score"]*scaling_factor
+        output_vector = gaussian_filter(output_vector, sigma=13)
         return torch.Tensor(output_vector).to(torch.float)
 
     def __len__(self):
@@ -81,7 +84,7 @@ class GenomicDataSet(Dataset):
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 8):
+    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 16):
         super().__init__()
         self.bedpe_file = bedpe_file
         self.reference_genome_file = reference_genome_file
