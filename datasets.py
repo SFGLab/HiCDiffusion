@@ -15,7 +15,7 @@ window_size = 1_000_000
 slide_size = 100_000
 output_res = 5_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
-scaling_factor = 1_000_000
+scaling_factor = 1_000
 num_workers_loader = 8
 
 class GenomicDataSet(Dataset):
@@ -63,7 +63,7 @@ class GenomicDataSet(Dataset):
         interactions_changed_coords = pd.DataFrame({"x": ((interactions["pos1"]-window["Start"])/output_res).astype(int), "y": ((interactions["pos2"]-window["Start"])/output_res).astype(int), "score": interactions["score"]})
         for _, row in interactions_changed_coords.iterrows():
             output_vector[row["x"], row["y"]] = row["score"]*scaling_factor
-        output_vector = gaussian_filter(output_vector, sigma=13)
+        output_vector = gaussian_filter(output_vector, sigma=5)
         return torch.Tensor(output_vector).to(torch.float)
 
     def __len__(self):

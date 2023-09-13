@@ -25,10 +25,10 @@ def main(args=None):
     early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0, patience=3, verbose=False, mode="min")
 
 
-    model = Interaction3DPredictor()
+    model = Interaction3DPredictor(genomic_data_module.batch_size)
     #trainer = pl.Trainer(accelerator="gpu", devices=2, num_nodes=2, strategy="ddp")
     logger = WandbLogger(project="Interaction3DPredictor", log_model=True)
-    trainer = pl.Trainer(gradient_clip_val=5, logger=logger, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), early_stop_callback])#, accumulate_grad_batches=8)
+    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), early_stop_callback], max_epochs=100)#, accumulate_grad_batches=8)
     logger.watch(model, log="all", log_freq=10)
     trainer.fit(model, datamodule=genomic_data_module)
     if(predict):
