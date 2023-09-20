@@ -11,3 +11,5 @@ predictions*/
 tb_logs/
 Interaction3DPredictor/
 wandb/
+hic/
+logs/

@@ -10,19 +10,22 @@ import re
 import math
 from scipy.ndimage.filters import gaussian_filter
 import comparison_datasets
+from skimage.transform import resize
 
 normal_chromosomes = ["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]
-window_size = 1_000_000
-slide_size = 100_000
-output_res = 5_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
+window_size = 2_000_000
+slide_size = 500_000
+output_res = 10_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
-scaling_factor = 1_000
-num_workers_loader = 8
+scaling_factor = 1
+num_workers_loader = 16
 
 class GenomicDataSet(Dataset):
     def __init__(self, bedpe_file, reference_genome_file, bed_exclude, chromosomes):
-        self.comparison_dataset = comparison_datasets.HiComparison()
-        self.comparison_dataset.load("chr9.npz")
+        self.comparison_dataset = {}
+        for chromosome in chromosomes:
+            self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
+            self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
 
         bed_exclude_df = pd.read_csv(bed_exclude, sep="\t", header=None, usecols=[*range(0, 3)], names=["Chromosome", "Start", "End"])
         bed_exclude_df["Start"] = ((bed_exclude_df["Start"]/output_res).apply(np.floor)*output_res).astype(int)
@@ -32,7 +35,6 @@ class GenomicDataSet(Dataset):
 
         reference_genome = self.load_reference(reference_genome_file, chromosomes)
         reference_genome = pr.PyRanges(reference_genome).subtract(self.bed_exclude)
-
         self.prepare_windows(reference_genome)
 
         pass
@@ -75,10 +77,11 @@ class GenomicDataSet(Dataset):
 
     def __getitem__(self, idx):
         window = self.windows.iloc[idx]
-        length_to_2 = 48576 # correction for input to network - easier to ooperate whith maxpooling when ^2
+        #length_to_2 = 48576 # correction for input to network - easier to ooperate whith maxpooling when ^2
+        length_to_2 = 97152 # correction for input to network - easier to ooperate whith maxpooling when ^2
         sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_2/2):window["End"]+int(length_to_2/2)]
         #return self.sequence_to_onehot(sequence), self.get_interactions_in_window(window), [window["Chromosome"], window["Start"], window["End"]]
-        return self.sequence_to_onehot(sequence), self.comparison_dataset.get(window["Start"], window_size, 5000), [window["Chromosome"], window["Start"], window["End"]]
+        return self.sequence_to_onehot(sequence), resize(torch.Tensor(self.comparison_dataset[window["Chromosome"]].get(window["Start"]-int(length_to_2/2), window_size+int(length_to_2/2), output_res)).to(torch.float), (256, 256), anti_aliasing=True), [window["Chromosome"], window["Start"], window["End"]]
 
     def sequence_to_onehot(self, sequence):
         sequence = re.sub(unwanted_chars, "N", sequence).replace("A", "0").replace("C", "1").replace("T", "2").replace("G", "3").replace("N", "4")
@@ -89,7 +92,7 @@ class GenomicDataSet(Dataset):
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 16):
+    def __init__(self, bedpe_file, reference_genome_file, bed_exclude, batch_size: int = 4):
         super().__init__()
         self.bedpe_file = bedpe_file
         self.reference_genome_file = reference_genome_file
@@ -97,12 +100,12 @@ class GenomicDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
 
     def setup(self, stage=None):
-        #self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]])
-        self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, ["chr9"]) # overfitting scenario - just for tests
+        self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]])
+        #self.genomic_train = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, ["chr9"]) # overfitting scenario - just for tests
         self.genomic_val = GenomicDataSet(self.bedpe_file, self.reference_genome_file, self.bed_exclude, ["chr9"])
 
     def train_dataloader(self):
-        return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=num_workers_loader)
+        return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=True)
 
     # def test_dataloader(self):
     #     return DataLoader(self.mnist_val, batch_size=self.batch_size)
@@ -111,4 +114,4 @@ class GenomicDataModule(pl.LightningDataModule):
         return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
 
     def val_dataloader(self):
-        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader)
+        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
