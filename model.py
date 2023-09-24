@@ -11,9 +11,8 @@ import pyranges as pr
 import pandas as pd
 import matplotlib
 import wandb
-from torchmetrics.classification import BinaryAccuracy, BinaryF1Score, BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryROC, MulticlassAccuracy
+from torchmetrics.classification import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
 from torchmetrics import MetricCollection
-
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
 starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 89_020_000, 97_520_000, 126_020_000} # HiChIP - added one interesting region
@@ -77,19 +76,17 @@ class ResidualConv2d(nn.Module):
         return self.relu(output+residual)    
     
 class Interaction3DPredictor(pl.LightningModule):
-    def __init__(self, validation_folder, prediction_folder, compare_to_hic=False):
+    def __init__(self, validation_folder, prediction_folder):
         super().__init__()
         self.save_hyperparameters()
-        self.compare_to_hic = compare_to_hic
+
         self.example_input_array = torch.Tensor(2, 5, int(math.pow(2, 21)))
         self.validation_folder = validation_folder
         self.prediction_folder = prediction_folder
 
         self.conv_blocks = nn.ModuleList([])
-        if(self.compare_to_hic):
-            encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8)
-        else:
-            encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8)
+        
+        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8)
 
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=8)
         self.relu = nn.ReLU()
@@ -97,11 +94,8 @@ class Interaction3DPredictor(pl.LightningModule):
 
         channels_in = [5, 32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256]
         channels_out = [32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256, 256]
-        if(self.compare_to_hic):
-            up_to = 13
-        else:
-            up_to = 13
-        for i in range(0, up_to):
+
+        for i in range(0, 13):
             self.conv_blocks.append(ResidualConv1d(channels_in[i], channels_out[i], 3, 1))
 
         for i in range(0, 5): #hic
@@ -111,17 +105,13 @@ class Interaction3DPredictor(pl.LightningModule):
 
         # metrics
         
-        metrics = MetricCollection([
-            BinaryAccuracy(), MulticlassAccuracy(num_classes=2, average="macro"), BinaryPrecision(), BinaryAUROC(), BinaryRecall(), BinaryF1Score()
+        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), R2Score(), PearsonCorrCoef()
         ])
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
 
     def repeat_dimension(self, x):
-        if(self.compare_to_hic):
-            dim_reapeat = 256
-        else:
-            dim_reapeat = 256
+        dim_reapeat = 256
             
         x_i = x.unsqueeze(2).repeat(1, 1, dim_reapeat, 1)
         x_j = x.unsqueeze(3).repeat(1, 1, 1, dim_reapeat)
@@ -142,11 +132,7 @@ class Interaction3DPredictor(pl.LightningModule):
         for block in self.conv_trans_blocks:
             x = block(x)
 
-        if(self.compare_to_hic):
-            x = x.view(-1, 256, 256)
-        else:
-            x = x.view(-1, 256, 256)
-            #x = x.view(-1, 512, 512)
+        x = x.view(-1, 256, 256)
 
         return x
 
@@ -154,15 +140,10 @@ class Interaction3DPredictor(pl.LightningModule):
         x, y, pos = batch
 
         y_pred = self(x)
-        #loss = torch.nn.BCEWithLogitsLoss()
-        loss = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([100.0]).to('cuda'))
-        #loss = torch.nn.MSELoss()
-        #mae = torch.nn.L1Loss()
-        y_pred_logit = torch.nn.Sigmoid()
-        y_pred_logit = y_pred_logit(y_pred)
+        loss = torch.nn.L1Loss()
 
         self.log("train_loss", loss(y_pred, y), on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
-        self.log_dict(self.train_metrics(y_pred_logit, y), sync_dist=True, batch_size=x.shape[0])
+        self.log_dict(self.train_metrics(y_pred, y), sync_dist=True, batch_size=x.shape[0])
 
         return loss(y_pred, y)
     
@@ -180,34 +161,20 @@ class Interaction3DPredictor(pl.LightningModule):
         x, y, pos = batch
         y_pred = self(x)
 
-        #loss = torch.nn.BCEWithLogitsLoss()
-        loss = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([100.0]).to('cuda'))
-        # loss = torch.nn.MSELoss()
-        # mae = torch.nn.L1Loss()
-
-        y_pred_logit = torch.nn.Sigmoid()
-        y_pred_logit = y_pred_logit(y_pred)
+        loss = torch.nn.L1Loss()
 
         self.log("val_loss", loss(y_pred, y), on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
-        self.log_dict(self.valid_metrics(y_pred_logit, y), sync_dist=True)
-
-        # roc_curve = BinaryROC()
-        # roc_curve.update(y_pred_logit, y)
-        # roc_curve.plot(score=True)
-        # self.logger.log({"roc" : wandb.plot.roc_curve(y, y_pred_logit)})
+        self.log_dict(self.valid_metrics(y_pred, y), sync_dist=True)
 
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):
-                create_image(self.validation_folder, y_pred_logit[i].cpu(), y[i].cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
+                create_image(self.validation_folder, y_pred[i].cpu(), y[i].cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y, pos = batch
         y_pred = self(x)
-        # for i in range(0, x.shape[0]):
-        #     path = create_image(self.prediction_folder, y_pred[i].cpu(), y[i].cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
-        #     example_name = "%s_final_prediction_%s_%s" % (str(x.get_device()), pos[0][i], str(pos[1][i].item()))
-        #     self.logger.log_image(key = example_name, images=[path])
+
         return y_pred
 
     def configure_optimizers(self):

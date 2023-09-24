@@ -22,17 +22,16 @@ predict = True
 def main(jobid):
     pl.seed_everything(1996)
     
-    compare_to_hic = False
     batch_size = 4
     
     predictions_validation = "predictions/predictions_validation_"+jobid
     predictions_final = "predictions/predictions_final_"+jobid
 
-    genomic_data_module = datasets.GenomicDataModule("hg00512_CTCF_pooled.5k.2.sig3Dinteractions.bedpe", "GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", batch_size, compare_to_hic)
+    genomic_data_module = datasets.GenomicDataModule("hg00512_CTCF_pooled.5k.2.sig3Dinteractions.bedpe", "GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", batch_size)
 
     early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0, patience=30, verbose=False, mode="min")
 
-    model = Interaction3DPredictor(predictions_validation, predictions_final, compare_to_hic)
+    model = Interaction3DPredictor(predictions_validation, predictions_final)
     logger = WandbLogger(project="Interaction3DPredictor", log_model=True)
     trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), early_stop_callback], max_epochs=100, num_sanity_val_steps=-1, accumulate_grad_batches=2)
     
@@ -58,28 +57,8 @@ def main(jobid):
 
     predictions = trainer.predict(model, datamodule=genomic_data_module)
 
-    # all_interactions = []
-    # for prediction_batch, real_data_batch in tqdm(zip(predictions, iter(genomic_data_module.predict_dataloader()))):
-    #     for prediction, real_data, real_chr, real_pos, real_end in zip(prediction_batch, real_data_batch[1], real_data_batch[2][0], real_data_batch[2][1], real_data_batch[2][2]):
-    #         for interaction in (prediction >= min_to_be_positive).nonzero():
-    #             interaction_real_starts = interaction*datasets.output_res+real_pos
-    #             all_interactions.append((real_chr, interaction_real_starts[0].item(), interaction_real_starts[0].item()+datasets.output_res, interaction_real_starts[1].item(), interaction_real_starts[1].item()+datasets.output_res, prediction[interaction[0].item(), interaction[1].item()].item()))
-    # all_interactions_df = pd.DataFrame(all_interactions, columns=["chr", "pos1", "end1", "pos2", "end2", "score"])
-    # all_interactions_df = all_interactions_df.groupby(["chr", "pos1", "end1", "pos2", "end2"]).agg(count=('score', 'size'), mean=('score', 'mean')).reset_index()
-    # # optional - filter out based on count
-    # # add code here
-    # # end of optional
-    # all_interactions_df['mean'] /= datasets.scaling_factor
-    # all_interactions_df['score'] = all_interactions_df['mean'].astype(int)
-    # all_interactions_df['chr1'] = all_interactions_df['chr']
-    # all_interactions_df['chr2'] = all_interactions_df['chr']
-    # all_interactions_df = all_interactions_df[['chr1', 'pos1', 'end1', 'chr2', 'pos2', 'end2', 'score']]
-    # all_interactions_df = all_interactions_df[all_interactions_df["score"] > 1]
-    # all_interactions_df.to_csv('predicted.bedpe', sep='\t', index=False)
-
 if __name__ == "__main__":
-    # args = ...  # you can use your CLI parser of choice, or the `LightningCLI`
-    # TRAIN
+    
     parser = argparse.ArgumentParser(
                     prog='ProgramName',
                     description='What the program does',
