@@ -65,7 +65,7 @@ class GenomicDataSet(Dataset):
 
     def __getitem__(self, idx):
         window = self.windows.iloc[idx]
-        length_to_input = 817152 # correction for input to network - easier to ooperate whith maxpooling when ^2
+        length_to_input = 97152 # correction for input to network - easier to ooperate whith maxpooling when ^2
         sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_input/2):window["End"]+int(length_to_input/2)]
         return self.sequence_to_onehot(sequence), resize(torch.Tensor(self.comparison_dataset[window["Chromosome"]].get(window["Start"]-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (256, 256), anti_aliasing=True), [window["Chromosome"], window["Start"], window["End"]]
 

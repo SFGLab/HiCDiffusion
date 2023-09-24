@@ -27,7 +27,7 @@ def main(jobid):
     predictions_validation = "predictions/predictions_validation_"+jobid
     predictions_final = "predictions/predictions_final_"+jobid
 
-    genomic_data_module = datasets.GenomicDataModule("hg00512_CTCF_pooled.5k.2.sig3Dinteractions.bedpe", "GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", batch_size)
+    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", batch_size)
 
     early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0, patience=30, verbose=False, mode="min")
 
@@ -58,7 +58,7 @@ def main(jobid):
     predictions = trainer.predict(model, datamodule=genomic_data_module)
 
 if __name__ == "__main__":
-    
+
     parser = argparse.ArgumentParser(
                     prog='ProgramName',
                     description='What the program does',

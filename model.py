@@ -11,7 +11,7 @@ import pyranges as pr
 import pandas as pd
 import matplotlib
 import wandb
-from torchmetrics.classification import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
+from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
 from torchmetrics import MetricCollection
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
@@ -19,19 +19,19 @@ starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 89_
 
 def create_image(folder, y_pred, y_real, epoch, chromosome, position):
         color_map = matplotlib.colors.LinearSegmentedColormap.from_list("", ["white","red"])
-        color_map_diff = matplotlib.colors.LinearSegmentedColormap.from_list("", ["red", "white","red"])
+        color_map_diff = matplotlib.colors.LinearSegmentedColormap.from_list("", ["blue", "white","red"])
         file_name = "%s/%s_%s_%s.png" % (folder, epoch, chromosome, str(position))
         plt.figure(figsize=(19,6))
         plt.subplot(1, 3, 1)
         plt.suptitle('Output %s - %s %s' % (epoch, chromosome, str(position)))
         plt.gca().set_title('Predicted')
-        plt.imshow(y_pred, cmap=color_map, vmin=0, vmax=1)
+        plt.imshow(y_pred, cmap=color_map, vmin=0, vmax=5)
         plt.subplot(1, 3, 2)
         plt.gca().set_title('Real')
-        plt.imshow(y_real, cmap=color_map, vmin=0, vmax=1)
+        plt.imshow(y_real, cmap=color_map, vmin=0, vmax=5)
         plt.subplot(1, 3, 3)
         plt.gca().set_title('Difference')
-        plt.imshow(y_real-y_pred, cmap=color_map_diff, vmin=-1, vmax=1)
+        plt.imshow(y_real-y_pred, cmap=color_map_diff, vmin=-5, vmax=5)
         plt.colorbar()
         plt.tight_layout()
         plt.savefig(file_name, dpi=400)
@@ -143,7 +143,8 @@ class Interaction3DPredictor(pl.LightningModule):
         loss = torch.nn.L1Loss()
 
         self.log("train_loss", loss(y_pred, y), on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
-        self.log_dict(self.train_metrics(y_pred, y), sync_dist=True, batch_size=x.shape[0])
+
+        self.log_dict(self.train_metrics(y_pred.view(-1), y.view(-1)), sync_dist=True, batch_size=x.shape[0])
 
         return loss(y_pred, y)
     
@@ -164,7 +165,7 @@ class Interaction3DPredictor(pl.LightningModule):
         loss = torch.nn.L1Loss()
 
         self.log("val_loss", loss(y_pred, y), on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
-        self.log_dict(self.valid_metrics(y_pred, y), sync_dist=True)
+        self.log_dict(self.valid_metrics(y_pred.view(-1), y.view(-1)), sync_dist=True)
 
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):
