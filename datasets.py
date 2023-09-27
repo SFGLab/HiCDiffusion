@@ -17,6 +17,7 @@ window_size = 2_000_000
 output_res = 10_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
 num_workers_loader = 32
+size_img = 64
 
 class GenomicDataSet(Dataset):
     def __init__(self, reference_genome_file, bed_exclude, chromosomes, slide_size):
@@ -67,7 +68,7 @@ class GenomicDataSet(Dataset):
         window = self.windows.iloc[idx]
         length_to_input = 97152 # correction for input to network - easier to ooperate whith maxpooling when ^2
         sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_input/2):window["End"]+int(length_to_input/2)]
-        return self.sequence_to_onehot(sequence), resize(torch.Tensor(self.comparison_dataset[window["Chromosome"]].get(window["Start"]-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (256, 256), anti_aliasing=True), [window["Chromosome"], window["Start"], window["End"]]
+        return self.sequence_to_onehot(sequence), resize(torch.Tensor(self.comparison_dataset[window["Chromosome"]].get(window["Start"]-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True), [window["Chromosome"], window["Start"], window["End"]]
 
     def sequence_to_onehot(self, sequence):
         sequence = re.sub(unwanted_chars, "N", sequence).replace("A", "0").replace("C", "1").replace("T", "2").replace("G", "3").replace("N", "4")

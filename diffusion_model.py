@@ -19,6 +19,8 @@ from diffusers import DDPMPipeline
 from diffusers.utils.torch_utils import randn_tensor
 from tqdm import tqdm
 
+size_img = 64
+
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
 starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 89_020_000, 97_520_000, 126_020_000} # HiChIP - added one interesting region
@@ -78,28 +80,28 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         
         self.noise_scheduler = DDPMScheduler(num_train_timesteps=1000)
     
-        self.encoder = Interaction3DPredictorSequenceVAE.load_from_checkpoint(vae_model).model.encoder
-        self.encoder.requires_grad = False
+        #self.encoder = Interaction3DPredictorSequenceVAE.load_from_checkpoint(vae_model).model.encoder
+        #self.encoder.requires_grad = False
         # DIFFUSION TIME
-        self.unet = UNet2DModel(256, 1, 1, block_out_channels=(64, 128, 256, 512), class_embed_type="identity")
-        #self.unet = UNet2DModel(256, 1, 1, block_out_channels=(256, 512, 1024, 2048), class_embed_type="identity")
+        self.unet = UNet2DModel(size_img, 1, 1)#, block_out_channels=(64, 128, 256, 512), class_embed_type="identity")
+        #self.unet = UNet2DModel(size_img, 1, 1, block_out_channels=(256, 512, 1024, 2048), class_embed_type="identity")
 
         metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), R2Score(), PearsonCorrCoef()
         ])
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
     
-    def forward(self, x, ts, encoder_hidden_states):
-        x = self.unet(x, ts, encoder_hidden_states)
+    def forward(self, x, ts):#, encoder_hidden_states):
+        x = self.unet(x, ts)#, encoder_hidden_states)
 
         return x
 
     def process_batch(self, batch):
         x, y, pos = batch
-        y = y.view(-1, 1, 256, 256)
+        y = y.view(-1, 1, size_img, size_img)
 
-        sequence_embeddings = self.encoder(x)
-        sequence_embeddings = sequence_embeddings.view(-1, 256)
+        #sequence_embeddings = self.encoder(x)
+        #sequence_embeddings = sequence_embeddings.view(-1, size_img)
 
         noise = torch.randn(y.shape, device=self.device)
 
@@ -107,17 +109,20 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
 
         noisy_y = self.noise_scheduler.add_noise(y, noise, timesteps)
         
-        noise_prediction = self(noisy_y, timesteps, sequence_embeddings)[0]
+        noise_prediction = self(noisy_y, timesteps)[0]
 
-        noise_prediction = noise_prediction.view(-1, 256, 256)
-        noisy_y = noisy_y.view(-1, 256, 256)
-        noise = noise.view(-1, 256, 256)
+        noise_prediction = noise_prediction.view(-1, size_img, size_img)
+        noisy_y = noisy_y.view(-1, size_img, size_img)
+        noise = noise.view(-1, size_img, size_img)
 
         loss = torch.nn.L1Loss()
 
-        return loss(noise_prediction, noise), noise_prediction, y.view(-1, 256, 256), noisy_y, pos
+        return loss(noise_prediction, noise), noise_prediction, y.view(-1, size_img, size_img), noisy_y, pos
 
     def training_step(self, batch, batch_idx):
+        # idea - use normal network to generate the image (from x to y), then use diffusion to make it even better
+        # x -> y_pred <- normal CNN-transformer encoder-decoder network (y_pred is considered to be NOISED one)
+        # y_pred -> y_pred_diffusion <- the "good" diffusion network
         loss, noise_prediction, y, noisy_y, _ = self.process_batch(batch)
 
         y_pred = noisy_y-noise_prediction
@@ -143,22 +148,22 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
 
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):
-                sequence_embeddings = self.encoder(x)
-                sequence_embeddings = sequence_embeddings.view(-1, 256)
-                image_shape = (x.shape[0], 1, 256, 256)
+                #sequence_embeddings = self.encoder(x)
+                #sequence_embeddings = sequence_embeddings.view(-1, size_img)
+                image_shape = (x.shape[0], 1, size_img, size_img)
                 image = randn_tensor(image_shape, generator=self.generator, device=self.device)
 
                 self.noise_scheduler.set_timesteps(val_interations)
 
                 for t in self.noise_scheduler.timesteps:
                     # 1. predict noise model_output
-                    model_output = self(image, t, sequence_embeddings).sample
+                    model_output = self(image, t).sample
 
                     # 2. compute previous image: x_t -> x_t-1
                     image = self.noise_scheduler.step(model_output, t, image, generator=self.generator).prev_sample
                 image = (image / 2 + 0.5).clamp(0, 1)
                 image = image.cpu().permute(0, 2, 3, 1)
-                image = image.view(-1, 256, 256).numpy()
+                image = image.view(-1, size_img, size_img).numpy()
                 create_image(self.validation_folder, image[i], y[i].cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
 
 
@@ -169,4 +174,4 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         return y_pred
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.0001)
+        return torch.optim.Adam(self.parameters(), lr=0.00001)
