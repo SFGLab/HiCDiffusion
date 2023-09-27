@@ -14,18 +14,18 @@ from skimage.transform import resize
 
 normal_chromosomes = ["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]
 window_size = 2_000_000
-slide_size = 500_000
 output_res = 10_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
 num_workers_loader = 32
 
 class GenomicDataSet(Dataset):
-    def __init__(self, reference_genome_file, bed_exclude, chromosomes):
-
+    def __init__(self, reference_genome_file, bed_exclude, chromosomes, slide_size):
         self.comparison_dataset = {}
         for chromosome in chromosomes:
             self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
             self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
+
+        self.slide_size = slide_size
 
         bed_exclude_df = pd.read_csv(bed_exclude, sep="\t", header=None, usecols=[*range(0, 3)], names=["Chromosome", "Start", "End"])
         bed_exclude_df["Start"] = ((bed_exclude_df["Start"]/output_res).apply(np.floor)*output_res).astype(int)
@@ -51,7 +51,7 @@ class GenomicDataSet(Dataset):
     def prepare_windows(self, reference_genome):
         all_chr_dfs = []
         for _, row in reference_genome.df.iterrows():
-            starts = [*range(row["Start"], row["End"], slide_size)]
+            starts = [*range(row["Start"], row["End"], self.slide_size)]
             ends = [x + window_size for x in starts]
             chr_df = pd.DataFrame({"Chromosome": [row["Chromosome"]]*len(starts), "Start": starts, "End": ends})
             all_chr_dfs.append(chr_df)
@@ -78,15 +78,16 @@ class GenomicDataSet(Dataset):
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, reference_genome_file, bed_exclude, batch_size: int = 4):
+    def __init__(self, reference_genome_file, bed_exclude, slide_size = 500_000, batch_size: int = 4):
         super().__init__()
         self.reference_genome_file = reference_genome_file
         self.bed_exclude = bed_exclude
         self.batch_size = batch_size
+        self.slide_size = slide_size
 
     def setup(self, stage=None):
-        self.genomic_train = GenomicDataSet(self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]])
-        self.genomic_val = GenomicDataSet(self.reference_genome_file, self.bed_exclude, ["chr9"])
+        self.genomic_train = GenomicDataSet(self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]], self.slide_size)
+        self.genomic_val = GenomicDataSet(self.reference_genome_file, self.bed_exclude, ["chr9"], self.slide_size)
 
     def train_dataloader(self):
         return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=True)
