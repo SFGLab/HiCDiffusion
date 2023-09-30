@@ -9,7 +9,9 @@ lightning_logs/
 *fa
 predictions*/
 tb_logs/
-Interaction3DPredictor/
+Interaction3DPredictor*/
+mock/
 wandb/
 hic/
 logs/
+*.ckpt

@@ -13,13 +13,11 @@ import matplotlib
 import wandb
 from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
 from torchmetrics import MetricCollection
-from diffusers import DDPMScheduler, UNet2DConditionModel, UNet2DModel
-from sequence_vae import Interaction3DPredictorSequenceVAE
-from diffusers import DDPMPipeline
-from diffusers.utils.torch_utils import randn_tensor
+from denoise_model import UnetConditional, GaussianDiffusionConditional
 from tqdm import tqdm
+from model import Interaction3DPredictor
 
-size_img = 64
+size_img = 256
 
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
@@ -27,107 +25,73 @@ starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 89_
 
 val_interations = 100
 
-def create_image(folder, y_pred, y_real, epoch, chromosome, position):
+def create_image(folder, y_pred, y_cond, y_real, epoch, chromosome, position):
         color_map = matplotlib.colors.LinearSegmentedColormap.from_list("", ["white","red"])
-        color_map_diff = matplotlib.colors.LinearSegmentedColormap.from_list("", ["red", "white","red"])
+        color_map_diff = matplotlib.colors.LinearSegmentedColormap.from_list("", ["blue", "white","red"])
         file_name = "%s/%s_%s_%s.png" % (folder, epoch, chromosome, str(position))
-        plt.figure(figsize=(19,6))
-        plt.subplot(1, 3, 1)
-        plt.suptitle('Output %s - %s %s' % (epoch, chromosome, str(position)))
-        plt.gca().set_title('Predicted')
-        plt.imshow(y_pred, cmap=color_map, vmin=0, vmax=5)
-        plt.subplot(1, 3, 2)
-        plt.gca().set_title('Real')
-        plt.imshow(y_real, cmap=color_map, vmin=0, vmax=5)
-        plt.subplot(1, 3, 3)
-        plt.gca().set_title('Difference')
-        plt.imshow(y_real-y_pred, cmap=color_map_diff, vmin=-5, vmax=5)
-        plt.colorbar()
-        plt.tight_layout()
+        fig = plt.figure(figsize=(8, 14), constrained_layout=True)
+        axs = fig.subplot_mosaic([['TopLeft', 'TopRight'],['MiddleLeft', 'MiddleRight'], ['Bottom', 'Bottom'], ['Bottom', 'Bottom']])
+
+        fig.suptitle('Output %s - %s %s' % (epoch, chromosome, str(position)))
+        axs["TopLeft"].set_title('Predicted - final')
+        axs["TopLeft"].imshow(y_pred, cmap=color_map, vmin=0, vmax=5)
+        axs["TopRight"].set_title('Predicted - E/D')
+        axs["TopRight"].imshow(y_cond, cmap=color_map, vmin=0, vmax=5)
+        axs["MiddleLeft"].set_title('Difference - final')
+        axs["MiddleLeft"].imshow(y_real-y_pred, cmap=color_map_diff, vmin=-5, vmax=5)
+        axs["MiddleRight"].set_title('Difference - E/D')
+        for_scale = axs["MiddleRight"].imshow(y_real-y_cond, cmap=color_map_diff, vmin=-5, vmax=5)
+        axs["Bottom"].set_title('Real')
+        axs["Bottom"].imshow(y_real, cmap=color_map, vmin=0, vmax=5)
+        fig.colorbar(for_scale, ax=list(axs.values()))
         plt.savefig(file_name, dpi=400)
         plt.cla()
-        return file_name
-
-class ResidualConv1d(nn.Module):
-    def __init__(self, hidden_in, hidden_out, kernel, padding):
-        super(ResidualConv1d, self).__init__()
-        self.main = nn.Sequential(
-                                    nn.Conv1d(hidden_in, hidden_out, kernel, padding=padding),
-                                    nn.BatchNorm1d(hidden_out),
-                                    nn.ReLU(),
-                                    nn.Conv1d(hidden_out, hidden_out, kernel, padding=padding),
-                                    nn.BatchNorm1d(hidden_out),
-                                    nn.MaxPool1d(2)
-                                    )
-        self.downscale = nn.Sequential(nn.Conv1d(hidden_in, hidden_out, kernel, padding=padding),
-                                            nn.MaxPool1d(2))
-        self.relu = nn.ReLU()
-    def forward(self, x):
-        residual = self.downscale(x)
-        output = self.main(x)
-
-        return self.relu(output+residual) 
     
 class Interaction3DPredictorDiffusion(pl.LightningModule):
-    def __init__(self, validation_folder, prediction_folder, vae_model):
+    def __init__(self, validation_folder, prediction_folder, encoder_decoder_model):
         super().__init__()
         self.save_hyperparameters()
         self.validation_folder = validation_folder
         self.prediction_folder = prediction_folder
-        self.generator = torch.manual_seed(1996)
-
-        #self.example_input_array = [torch.Tensor(2, 256, 256), torch.Tensor(2).long(), torch.Tensor(2, 256, 256)]
         
-        self.noise_scheduler = DDPMScheduler(num_train_timesteps=1000)
-    
-        #self.encoder = Interaction3DPredictorSequenceVAE.load_from_checkpoint(vae_model).model.encoder
-        #self.encoder.requires_grad = False
-        # DIFFUSION TIME
-        self.unet = UNet2DModel(size_img, 1, 1)#, block_out_channels=(64, 128, 256, 512), class_embed_type="identity")
-        #self.unet = UNet2DModel(size_img, 1, 1, block_out_channels=(256, 512, 1024, 2048), class_embed_type="identity")
+        self.encoder_decoder = Interaction3DPredictor.load_from_checkpoint(encoder_decoder_model)
+        self.encoder_decoder.freeze()
+        self.model = UnetConditional(
+            dim = 64,
+            dim_mults = (1, 2, 4, 8),
+            flash_attn = True,
+            channels=1,
+            self_condition=True
+        )
+
+        self.diffusion = GaussianDiffusionConditional(
+            self.model,
+            image_size = 256,
+            timesteps = 1000,
+            sampling_timesteps = 250 # number of steps
+        )
+
 
         metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), R2Score(), PearsonCorrCoef()
         ])
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
-    
-    def forward(self, x, ts):#, encoder_hidden_states):
-        x = self.unet(x, ts)#, encoder_hidden_states)
-
-        return x
 
     def process_batch(self, batch):
         x, y, pos = batch
         y = y.view(-1, 1, size_img, size_img)
 
-        #sequence_embeddings = self.encoder(x)
-        #sequence_embeddings = sequence_embeddings.view(-1, size_img)
+        y_cond = self.encoder_decoder.encoder(x)
+        y_cond = self.encoder_decoder.decoder(y_cond)
+        y_cond = y_cond.view(-1, 1, size_img, size_img)
+        loss = self.diffusion(y, x_self_cond=y_cond)
 
-        noise = torch.randn(y.shape, device=self.device)
-
-        timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (y.shape[0],), device=self.device).long()
-
-        noisy_y = self.noise_scheduler.add_noise(y, noise, timesteps)
-        
-        noise_prediction = self(noisy_y, timesteps)[0]
-
-        noise_prediction = noise_prediction.view(-1, size_img, size_img)
-        noisy_y = noisy_y.view(-1, size_img, size_img)
-        noise = noise.view(-1, size_img, size_img)
-
-        loss = torch.nn.L1Loss()
-
-        return loss(noise_prediction, noise), noise_prediction, y.view(-1, size_img, size_img), noisy_y, pos
+        return loss, x, y, y_cond, pos
 
     def training_step(self, batch, batch_idx):
-        # idea - use normal network to generate the image (from x to y), then use diffusion to make it even better
-        # x -> y_pred <- normal CNN-transformer encoder-decoder network (y_pred is considered to be NOISED one)
-        # y_pred -> y_pred_diffusion <- the "good" diffusion network
-        loss, noise_prediction, y, noisy_y, _ = self.process_batch(batch)
+        loss, x, _, _, _ = self.process_batch(batch)
 
-        y_pred = noisy_y-noise_prediction
-
-        self.log("train_loss", loss, on_epoch=True, prog_bar=True, batch_size=noisy_y.shape[0], sync_dist=True)
+        self.log("train_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
 
         return loss
     
@@ -142,29 +106,14 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
                     self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, "chr9", str(pos))])
 
     def validation_step(self, batch, batch_idx):
-        x, y, pos = batch
-        loss, noise_prediction, y, noisy_y, _ = self.process_batch(batch)
-        self.log("train_loss", loss, on_epoch=True, prog_bar=True, batch_size=noisy_y.shape[0], sync_dist=True)
+        loss, x, y, y_cond, pos = self.process_batch(batch)
+
+        self.log("train_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
 
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):
-                #sequence_embeddings = self.encoder(x)
-                #sequence_embeddings = sequence_embeddings.view(-1, size_img)
-                image_shape = (x.shape[0], 1, size_img, size_img)
-                image = randn_tensor(image_shape, generator=self.generator, device=self.device)
-
-                self.noise_scheduler.set_timesteps(val_interations)
-
-                for t in self.noise_scheduler.timesteps:
-                    # 1. predict noise model_output
-                    model_output = self(image, t).sample
-
-                    # 2. compute previous image: x_t -> x_t-1
-                    image = self.noise_scheduler.step(model_output, t, image, generator=self.generator).prev_sample
-                image = (image / 2 + 0.5).clamp(0, 1)
-                image = image.cpu().permute(0, 2, 3, 1)
-                image = image.view(-1, size_img, size_img).numpy()
-                create_image(self.validation_folder, image[i], y[i].cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
+                predicted_y = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond[i].view(1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+                create_image(self.validation_folder, predicted_y.view(256, 256).cpu(), y_cond[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -174,4 +123,4 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         return y_pred
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.00001)
+        return torch.optim.Adam(self.parameters(), lr=0.0001)

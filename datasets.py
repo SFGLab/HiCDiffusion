@@ -16,8 +16,8 @@ normal_chromosomes = ["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "
 window_size = 2_000_000
 output_res = 10_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
-num_workers_loader = 32
-size_img = 64
+num_workers_loader = 8
+size_img = 256
 
 class GenomicDataSet(Dataset):
     def __init__(self, reference_genome_file, bed_exclude, chromosomes, slide_size):

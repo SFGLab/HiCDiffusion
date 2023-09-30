@@ -1,7 +1,7 @@
 import torch
 import datasets
 import lightning.pytorch as pl
-from diffusion_model import Interaction3DPredictorDiffusion
+from model import Interaction3DPredictor
 from lightning.pytorch.callbacks import ModelSummary
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 import os
@@ -19,24 +19,24 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 def main(jobid):
     pl.seed_everything(1996)
     
-    batch_size = 16
+    batch_size = 4
     
     predictions_validation = "predictions/predictions_validation_"+jobid
     predictions_final = "predictions/predictions_final_"+jobid
-    encoder_decoder_model = "encoder_decoder.ckpt"
 
     checkpoint_callback = ModelCheckpoint(
         save_top_k=10,
-        monitor="train_loss",
+        monitor="val_loss",
         mode="min"
     )
+    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size)
 
-    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 50_000, batch_size)
+    #early_stop_callback = EarlyStopping(monitor="train_loss", min_delta=0, patience=30, verbose=False, mode="min")
 
-    model = Interaction3DPredictorDiffusion(predictions_validation, predictions_final, encoder_decoder_model)
+    model = Interaction3DPredictor(predictions_validation, predictions_final)
 
-    logger = WandbLogger(project="Interaction3DPredictorDiffusion", log_model=True)
-    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback], max_epochs=300, num_sanity_val_steps=-1, accumulate_grad_batches=2)
+    logger = WandbLogger(project="Interaction3DPredictor", log_model=True)
+    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback], max_epochs=200, num_sanity_val_steps=-1, accumulate_grad_batches=2)
     
     if(trainer.global_rank == 0):
         if os.path.exists(predictions_validation) and os.path.isdir(predictions_validation):

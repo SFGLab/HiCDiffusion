@@ -37,7 +37,61 @@ def create_image(folder, y_pred, y_real, epoch, chromosome, position):
         plt.savefig(file_name, dpi=400)
         plt.cla()
         return file_name
+class Encoder(nn.Module):
+    def __init__(self):
+        super(Encoder, self).__init__()
+        self.conv_blocks = nn.ModuleList([])
+        
+        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8)
 
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=8)
+        self.relu = nn.ReLU()
+
+        channels_in = [5, 32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256]
+        channels_out = [32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256, 256]
+
+        for i in range(0, 13):
+            self.conv_blocks.append(ResidualConv1d(channels_in[i], channels_out[i], 3, 1))
+
+    def repeat_dimension(self, x):
+        dim_reapeat = 256
+            
+        x_i = x.unsqueeze(2).repeat(1, 1, dim_reapeat, 1)
+        x_j = x.unsqueeze(3).repeat(1, 1, 1, dim_reapeat)
+        return torch.cat([x_i, x_j], dim = 1)
+    
+    def forward(self, x):
+        for block in self.conv_blocks:
+            x = block(x)
+
+        res_transformer = x
+
+        x = self.transformer_encoder(x)
+
+        x = self.relu(x+res_transformer)
+
+        x = self.repeat_dimension(x)
+        
+        return x
+
+class Decoder(nn.Module):
+    def __init__(self):
+        super(Decoder, self).__init__()
+        self.conv_trans_blocks = nn.ModuleList([])
+
+        for i in range(0, 5):
+            self.conv_trans_blocks.append(ResidualConv2d(512, 512, 3, 2**(i+1), 2**(i+1)))
+
+        self.conv_trans_blocks.append(nn.Sequential(nn.Conv2d(512, 1, 1)))
+
+
+    def forward(self, x):
+        for block in self.conv_trans_blocks:
+            x = block(x)
+
+        x = x.view(-1, 256, 256)
+
+        return x
 
 class ResidualConv1d(nn.Module):
     def __init__(self, hidden_in, hidden_out, kernel, padding):
@@ -84,24 +138,8 @@ class Interaction3DPredictor(pl.LightningModule):
         self.validation_folder = validation_folder
         self.prediction_folder = prediction_folder
 
-        self.conv_blocks = nn.ModuleList([])
-        
-        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8)
-
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=8)
-        self.relu = nn.ReLU()
-        self.conv_trans_blocks = nn.ModuleList([])
-
-        channels_in = [5, 32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256]
-        channels_out = [32, 32, 32, 64, 64, 64, 128, 128, 256, 256, 256, 256, 256, 256]
-
-        for i in range(0, 13):
-            self.conv_blocks.append(ResidualConv1d(channels_in[i], channels_out[i], 3, 1))
-
-        for i in range(0, 5): #hic
-            self.conv_trans_blocks.append(ResidualConv2d(512, 512, 3, 2**(i+1), 2**(i+1)))
-
-        self.conv_trans_blocks.append(nn.Sequential(nn.Conv2d(512, 1, 1)))
+        self.encoder = Encoder()
+        self.decoder = Decoder()
 
         # metrics
         
@@ -118,22 +156,10 @@ class Interaction3DPredictor(pl.LightningModule):
         return torch.cat([x_i, x_j], dim = 1)
     
     def forward(self, x):
-        for block in self.conv_blocks:
-            x = block(x)
 
-        res_transformer = x
-
-        x = self.transformer_encoder(x)
-
-        x = self.relu(x+res_transformer)
-
-        x = self.repeat_dimension(x)
-
-        for block in self.conv_trans_blocks:
-            x = block(x)
-
-        x = x.view(-1, 256, 256)
-
+        x = self.encoder(x)
+        x = self.decoder(x)
+        
         return x
 
     def training_step(self, batch, batch_idx):
