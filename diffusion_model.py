@@ -37,9 +37,10 @@ def create_image(folder, y_pred, y_cond, y_real, epoch, chromosome, position):
         axs["TopLeft"].imshow(y_pred, cmap=color_map, vmin=0, vmax=5)
         axs["TopRight"].set_title('Predicted - E/D')
         axs["TopRight"].imshow(y_cond, cmap=color_map, vmin=0, vmax=5)
-        axs["MiddleLeft"].set_title('Difference - final')
+        pearson = PearsonCorrCoef()
+        axs["MiddleLeft"].set_title('Difference - final (PCC: %s)' % str(round(pearson(y_pred.view(-1), y_real.view(-1)).item(), 4)))
         axs["MiddleLeft"].imshow(y_real-y_pred, cmap=color_map_diff, vmin=-5, vmax=5)
-        axs["MiddleRight"].set_title('Difference - E/D')
+        axs["MiddleRight"].set_title('Difference - E/D (PCC: %s)' % str(round(pearson(y_cond.view(-1), y_real.view(-1)).item(), 4)))
         for_scale = axs["MiddleRight"].imshow(y_real-y_cond, cmap=color_map_diff, vmin=-5, vmax=5)
         axs["Bottom"].set_title('Real')
         axs["Bottom"].imshow(y_real, cmap=color_map, vmin=0, vmax=5)
@@ -109,8 +110,13 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         loss, x, y, y_cond, pos = self.process_batch(batch)
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
-
-        for i in range(0, x.shape[0]):
+        
+        # every 10 epoch - log statistics, which means generating all the images
+        if(self.current_epoch % 10 == 0):
+            predicted_y = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+            self.log_dict(self.valid_metrics(predicted_y.view(-1), y.view(-1)), sync_dist=True, batch_size=x.shape[0])
+        # log sample images
+        for i in range(0, x.shape[0]-1):
             if(pos[1][i].item() in starts_to_log):
                 predicted_y = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond[i].view(1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
                 create_image(self.validation_folder, predicted_y.view(256, 256).cpu(), y_cond[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), self.current_epoch, pos[0][i], pos[1][i].item())

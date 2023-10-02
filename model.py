@@ -30,7 +30,8 @@ def create_image(folder, y_pred, y_real, epoch, chromosome, position):
         plt.gca().set_title('Real')
         plt.imshow(y_real, cmap=color_map, vmin=0, vmax=5)
         plt.subplot(1, 3, 3)
-        plt.gca().set_title('Difference')
+        pearson = PearsonCorrCoef()
+        plt.gca().set_title('Difference (PCC: %s)' % str(round(pearson(y_pred.view(-1), y_real.view(-1)).item(), 4)))
         plt.imshow(y_real-y_pred, cmap=color_map_diff, vmin=-5, vmax=5)
         plt.colorbar()
         plt.tight_layout()
@@ -143,7 +144,7 @@ class Interaction3DPredictor(pl.LightningModule):
 
         # metrics
         
-        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), R2Score(), PearsonCorrCoef()
+        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef()
         ])
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
@@ -191,7 +192,7 @@ class Interaction3DPredictor(pl.LightningModule):
         loss = torch.nn.L1Loss()
 
         self.log("val_loss", loss(y_pred, y), on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
-        self.log_dict(self.valid_metrics(y_pred.view(-1), y.view(-1)), sync_dist=True)
+        self.log_dict(self.valid_metrics(y_pred.view(-1), y.view(-1)), sync_dist=True, batch_size=x.shape[0])
 
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):

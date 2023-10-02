@@ -27,7 +27,7 @@ def main(jobid):
 
     checkpoint_callback = ModelCheckpoint(
         save_top_k=10,
-        monitor="train_loss",
+        monitor="val_PearsonCorrCoef",
         mode="min"
     )
 
