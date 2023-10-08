@@ -11,11 +11,15 @@ import pyranges as pr
 import pandas as pd
 import matplotlib
 import wandb
-from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
+from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef, SpearmanCorrCoef
 from torchmetrics import MetricCollection
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
+def ptp(input):
+    return input.max() - input.min()
+
 starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 89_020_000, 97_520_000, 126_020_000} # HiChIP - added one interesting region
+eps = 1e-7
 
 def create_image(folder, y_pred, y_real, epoch, chromosome, position):
         color_map = matplotlib.colors.LinearSegmentedColormap.from_list("", ["white","red"])
@@ -83,14 +87,11 @@ class Decoder(nn.Module):
         for i in range(0, 5):
             self.conv_trans_blocks.append(ResidualConv2d(512, 512, 3, 2**(i+1), 2**(i+1)))
 
-        self.conv_trans_blocks.append(nn.Sequential(nn.Conv2d(512, 1, 1)))
 
 
     def forward(self, x):
         for block in self.conv_trans_blocks:
             x = block(x)
-
-        x = x.view(-1, 256, 256)
 
         return x
 
@@ -141,10 +142,11 @@ class Interaction3DPredictor(pl.LightningModule):
 
         self.encoder = Encoder()
         self.decoder = Decoder()
+        self.reduce_layer = nn.Sequential(nn.Conv2d(512, 1, 1))
 
         # metrics
         
-        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef()
+        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef(), SpearmanCorrCoef()
         ])
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
@@ -160,6 +162,8 @@ class Interaction3DPredictor(pl.LightningModule):
 
         x = self.encoder(x)
         x = self.decoder(x)
+        x = self.reduce_layer(x)
+        x = x.view(-1, 256, 256)
         
         return x
 
@@ -171,7 +175,16 @@ class Interaction3DPredictor(pl.LightningModule):
 
         self.log("train_loss", loss(y_pred, y), on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
 
-        self.log_dict(self.train_metrics(y_pred.view(-1), y.view(-1)), sync_dist=True, batch_size=x.shape[0])
+        y_pred_flat = y_pred.view(-1)
+        y_flat = y.view(-1)
+        
+        if(ptp(y_pred_flat) == 0.0):
+            y_pred_flat[0] += eps
+            
+        if(ptp(y_flat) == 0.0):
+            y_flat[0] += eps
+        
+        self.log_dict(self.train_metrics(y_pred_flat, y_flat), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
 
         return loss(y_pred, y)
     
@@ -192,7 +205,16 @@ class Interaction3DPredictor(pl.LightningModule):
         loss = torch.nn.L1Loss()
 
         self.log("val_loss", loss(y_pred, y), on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
-        self.log_dict(self.valid_metrics(y_pred.view(-1), y.view(-1)), sync_dist=True, batch_size=x.shape[0])
+        y_pred_flat = y_pred.view(-1)
+        y_flat = y.view(-1)
+        
+        if(ptp(y_pred_flat) == 0.0):
+            y_pred_flat[0] += eps
+            
+        if(ptp(y_flat) == 0.0):
+            y_flat[0] += eps
+        
+        self.log_dict(self.valid_metrics(y_pred_flat, y_flat), on_epoch=True, sync_dist=True, batch_size=x.shape[0])
 
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):

@@ -21,11 +21,18 @@ def extract(a, t, x_shape):
 
 class UnetConditional(Unet):
     
-    def __init__(self, dim, dim_mults, flash_attn, channels, self_condition):
-        super().__init__(dim=dim, dim_mults=dim_mults, flash_attn=flash_attn, channels=channels, self_condition=self_condition)
+    def __init__(self, dim, dim_mults, flash_attn, channels):
+        super().__init__(dim=dim, dim_mults=dim_mults, flash_attn=flash_attn, channels=channels)
+        self.init_conv = nn.Identity() # we will handle initial conv ourselves :)
+        
+        self.init_conv_x = nn.Conv2d(self.channels, dim, 7, padding = 3)
+        self.init_conv_x_cond = nn.Conv2d(512, dim, 7, padding = 3)
 
     def forward(self, x, time, x_self_cond):
-        return super().forward(x+x_self_cond, time)
+        x = self.init_conv_x(x)
+        x_self_cond = self.init_conv_x_cond(x_self_cond)
+        x = super().forward(x+x_self_cond, time)
+        return x
 
 class GaussianDiffusionConditional(GaussianDiffusion):
     def __init__(self, model, image_size, timesteps, sampling_timesteps):

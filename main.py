@@ -23,15 +23,15 @@ def main(jobid):
     
     predictions_validation = "predictions/predictions_validation_"+jobid
     predictions_final = "predictions/predictions_final_"+jobid
-    encoder_decoder_model = "encoder_decoder.ckpt"
+    encoder_decoder_model = "encoder_decoder.ckpt" # ckpt 173
 
     checkpoint_callback = ModelCheckpoint(
         save_top_k=10,
-        monitor="val_PearsonCorrCoef",
+        monitor="val_loss",
         mode="min"
     )
 
-    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 50_000, batch_size)
+    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size)
 
     model = Interaction3DPredictorDiffusion(predictions_validation, predictions_final, encoder_decoder_model)
 

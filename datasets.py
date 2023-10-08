@@ -100,4 +100,4 @@ class GenomicDataModule(pl.LightningDataModule):
         return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
 
     def val_dataloader(self):
-        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=True)
+        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
