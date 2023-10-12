@@ -21,36 +21,27 @@ def main(jobid):
     
     batch_size = 16
     
-    predictions_validation = "predictions/predictions_validation_"+jobid
-    encoder_decoder_model = "encoder_decoder.ckpt" # ckpt 173
-
-    checkpoint_callback = ModelCheckpoint(
-        save_top_k=10,
-        monitor="val_loss",
-        mode="min"
-    )
+    test_model_folder = "test_model_folder/"
+    encoder_decoder_model = "final_model.ckpt" # ckpt 53 # NOT FINAL MODEL!!!
 
     genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size)
 
-    model = Interaction3DPredictorDiffusion(predictions_validation, encoder_decoder_model)
+    model = Interaction3DPredictorDiffusion.load_from_checkpoint(encoder_decoder_model)
 
-    logger = WandbLogger(project="Interaction3DPredictorDiffusion", log_model=True)
-    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback], max_epochs=300, num_sanity_val_steps=0, accumulate_grad_batches=2)
+    logger = WandbLogger(project="Interaction3DPredictorDiffusionTest", log_model=True)
+    trainer = pl.Trainer(logger=logger, callbacks=[ModelSummary(max_depth=2)], devices=1, num_sanity_val_steps=0)
     
-    if(trainer.global_rank == 0):
-        if os.path.exists(predictions_validation) and os.path.isdir(predictions_validation):
-            shutil.rmtree(predictions_validation)
-            time.sleep(2)
-        try:
-            os.mkdir(predictions_validation)
-        except OSError:
-            pass
+    if os.path.exists(test_model_folder) and os.path.isdir(test_model_folder):
+        shutil.rmtree(test_model_folder)
+        time.sleep(2)
+    try:
+        os.mkdir(test_model_folder)
+    except OSError:
+        pass
 
     logger.watch(model, log="all", log_freq=10)
     
-    trainer.fit(model, datamodule=genomic_data_module)
-
-    #predictions = trainer.predict(model, datamodule=genomic_data_module)
+    trainer.test(model, datamodule=genomic_data_module)
 
 if __name__ == "__main__":
 

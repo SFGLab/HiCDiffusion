@@ -93,11 +93,11 @@ class GenomicDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=True)
 
-    # def test_dataloader(self):
-    #     return DataLoader(self.mnist_val, batch_size=self.batch_size)
+    def test_dataloader(self):
+        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
     
-    def predict_dataloader(self):
+    def val_dataloader(self):
         return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
 
-    def val_dataloader(self):
+    def predict_dataloader(self):
         return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)

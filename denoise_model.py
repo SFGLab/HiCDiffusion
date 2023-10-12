@@ -5,6 +5,26 @@ import math
 from einops import rearrange, reduce, repeat
 import torch.nn.functional as F
 from tqdm import tqdm
+# def symmetricND(size: int, dims: int) -> torch.Tensor:
+#     data = torch.randn(*[size] * dims)
+#     return functools.reduce(
+#         operator.add,
+#         (
+#             torch.permute(data, permutation)
+#             for permutation in itertools.permutations(range(dims))
+#         ),
+#     )
+
+# def random_symetric(shape, device):
+#     tensor_list = []
+#     for i in range(0, shape[0]):
+#         tensor = symmetricND(shape[2], 2).to(device).view(1, 1, shape[2], shape[3])
+#         tensor_list.append(tensor)
+#     tensor = torch.cat(tensor_list)
+#     return tensor
+
+# def randn_like_symetric(img):
+#     return random_symetric(img.shape, img.device)
 
 def exists(x):
     return x is not None
@@ -25,13 +45,13 @@ class UnetConditional(Unet):
         super().__init__(dim=dim, dim_mults=dim_mults, flash_attn=flash_attn, channels=channels)
         self.init_conv = nn.Identity() # we will handle initial conv ourselves :)
         
-        self.init_conv_x = nn.Conv2d(self.channels, dim, 7, padding = 3)
-        self.init_conv_x_cond = nn.Conv2d(512, dim, 7, padding = 3)
+        self.init_conv_x = nn.Conv2d(2, dim, 7, padding = 3)
+        # self.init_conv_x_cond = nn.Conv2d(512, dim, 7, padding = 3)
 
     def forward(self, x, time, x_self_cond):
+        x = torch.cat((x, x_self_cond), 1)
         x = self.init_conv_x(x)
-        x_self_cond = self.init_conv_x_cond(x_self_cond)
-        x = super().forward(x+x_self_cond, time)
+        x = super().forward(x, time)
         return x
 
 class GaussianDiffusionConditional(GaussianDiffusion):
@@ -39,49 +59,45 @@ class GaussianDiffusionConditional(GaussianDiffusion):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps, auto_normalize=False)
 
     @torch.inference_mode()
-    def ddim_sample(self, shape, cond, return_all_timesteps = False):
-        batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[0], self.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
-
-        times = torch.linspace(-1, total_timesteps - 1, steps = sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
-        times = list(reversed(times.int().tolist()))
-        time_pairs = list(zip(times[:-1], times[1:])) # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
+    def p_sample(self, x, t: int, x_self_cond = None):
+        b, *_, device = *x.shape, self.device
+        batched_times = torch.full((b,), t, device = device, dtype = torch.long)
+        model_mean, _, model_log_variance, x_start = self.p_mean_variance(x = x, t = batched_times, x_self_cond = x_self_cond, clip_denoised = True)
+        noise = torch.randn_like(x) if t > 0 else 0. # no noise if t == 0
+        pred_img = model_mean + (0.5 * model_log_variance).exp() * noise
+        return pred_img, x_start
+    
+    @torch.inference_mode()
+    def p_sample_loop(self, shape, cond, return_all_timesteps = False):
+        batch, device = shape[0], self.device
 
         img = torch.randn(shape, device = device)
         imgs = [img]
+
         x_start = None
 
-        for time, time_next in time_pairs:
-            time_cond = torch.full((batch,), time, device = device, dtype = torch.long)
-            
-            pred_noise, x_start, *_ = self.model_predictions(img, time_cond, cond, clip_x_start = False, rederive_pred_noise = False)
-
-            if time_next < 0:
-                img = x_start
-                imgs.append(img)
-                continue
-
-            alpha = self.alphas_cumprod[time]
-            alpha_next = self.alphas_cumprod[time_next]
-
-            sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
-            c = (1 - alpha_next - sigma ** 2).sqrt()
-
-            noise = torch.randn_like(img)
-
-            img = x_start * alpha_next.sqrt() + \
-                  c * pred_noise + \
-                  sigma * noise
+        for t in reversed(range(0, self.num_timesteps)):
+            self_cond = x_start if self.self_condition else None
+            img, x_start = self.p_sample(img, t, cond)
             imgs.append(img)
 
         ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
 
         ret = self.unnormalize(ret)
-        
         return ret
 
+    def norm(self, tensor):
+        norm_min = 0
+        norm_max = 10
+        return 2*(tensor-norm_min)/(norm_max-norm_min)-1
+    def denorm(self, tensor):
+        norm_min = 0
+        norm_max = 10
+        return (tensor+1)/2*(norm_max-norm_min)+norm_min
+    
     def p_losses(self, x_start, t, x_self_cond = None, noise = None, offset_noise_strength = None):
         b, c, h, w = x_start.shape
-
+        
         noise = default(noise, lambda: torch.randn_like(x_start))
 
         # offset noise - https://www.crosslabs.org/blog/diffusion-with-offset-noise
@@ -94,7 +110,7 @@ class GaussianDiffusionConditional(GaussianDiffusion):
 
         # noise sample
 
-        x = self.q_sample(x_start = x_start, t = t, noise = noise)
+        x = self.q_sample(x_start = x_start-x_self_cond, t = t, noise = noise)
 
         model_out = self.model(x, t, x_self_cond)
 

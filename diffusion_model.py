@@ -11,7 +11,8 @@ import pyranges as pr
 import pandas as pd
 import matplotlib
 import wandb
-from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef, SpearmanCorrCoef
+from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef, SpearmanCorrCoef, CosineSimilarity, ConcordanceCorrCoef, RelativeSquaredError
+from torchmetrics.image import PeakSignalNoiseRatio, UniversalImageQualityIndex, ErrorRelativeGlobalDimensionlessSynthesis, MultiScaleStructuralSimilarityIndexMeasure, PeakSignalNoiseRatioWithBlockedEffect, RelativeAverageSpectralError, RootMeanSquaredErrorUsingSlidingWindow, SpectralDistortionIndex, StructuralSimilarityIndexMeasure, VisualInformationFidelity
 from torchmetrics import MetricCollection
 from denoise_model import UnetConditional, GaussianDiffusionConditional
 from tqdm import tqdm
@@ -53,11 +54,10 @@ def create_image(folder, y_pred, y_cond, y_real, epoch, chromosome, position):
         plt.cla()
     
 class Interaction3DPredictorDiffusion(pl.LightningModule):
-    def __init__(self, validation_folder, prediction_folder, encoder_decoder_model):
+    def __init__(self, validation_folder, encoder_decoder_model):
         super().__init__()
         self.save_hyperparameters()
         self.validation_folder = validation_folder
-        self.prediction_folder = prediction_folder
         
         self.encoder_decoder = Interaction3DPredictor.load_from_checkpoint(encoder_decoder_model)
         self.encoder_decoder.freeze()
@@ -73,18 +73,23 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
             self.model,
             image_size = 256,
             timesteps = 1000,
-            sampling_timesteps = 999 # number of steps - change to 999 later
+            sampling_timesteps = 1000 # number of steps - change to 999 later
         )
 
 
-        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef(), SpearmanCorrCoef()
+        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef(), SpearmanCorrCoef(), CosineSimilarity(), ConcordanceCorrCoef(), RelativeSquaredError(), R2Score()
+        ])
+        metrics_image = MetricCollection([ PeakSignalNoiseRatio(),  UniversalImageQualityIndex(), ErrorRelativeGlobalDimensionlessSynthesis(), MultiScaleStructuralSimilarityIndexMeasure(), PeakSignalNoiseRatioWithBlockedEffect(), RelativeAverageSpectralError(), RootMeanSquaredErrorUsingSlidingWindow(), SpectralDistortionIndex(), StructuralSimilarityIndexMeasure(), VisualInformationFidelity()
         ])
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
         self.valid_metrics_cond = metrics.clone(prefix='val_cond_')
+        self.valid_metrics_image = metrics_image.clone(prefix='val_image_')
+        self.valid_metrics_cond_image = metrics_image.clone(prefix='val_cond_image_')
 
     def process_batch(self, batch):
         x, y, pos = batch
+        
         y = y.view(-1, 1, size_img, size_img)
 
         y_cond = self.encoder_decoder.encoder(x)
@@ -93,14 +98,12 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         y_cond_decoded = y_cond_decoded.view(-1, size_img, size_img)
         
         y_cond = y_cond.view(-1, 512, size_img, size_img)
-        
-        
-        loss = self.diffusion(y, x_self_cond=y_cond)
+        loss = self.diffusion(y, x_self_cond=y_cond_decoded.view(-1, 1, size_img, size_img))
 
         return loss, x, y, y_cond, y_cond_decoded, pos
 
     def training_step(self, batch, batch_idx):
-        loss, x, _, _, _ = self.process_batch(batch)
+        loss, x, _, _, _, _ = self.process_batch(batch)
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
 
@@ -122,32 +125,78 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
         
         # every 10 epoch - log statistics, which means generating all the images
-        if(self.current_epoch % 10 == 0):
-            y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond.view(-1, 512, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+        if(self.current_epoch % 10 == 9):
+            y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond_decoded.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+            y_pred = y_pred+y_cond_decoded.view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
             
             y_pred_flat = y_pred.view(-1)
             y_flat = y.view(-1)
-                
+            y_cond_decoded_flat = y_cond_decoded.view(-1) 
             if(ptp(y_pred_flat) == 0.0):
                y_pred_flat[0] += eps
                 
             if(ptp(y_flat) == 0.0):
                 y_flat[0] += eps
-                
+                    
+            if(ptp(y_cond_decoded_flat) == 0.0):
+                y_cond_decoded_flat[0] += eps
+            
             self.log_dict(self.valid_metrics(y_pred_flat, y_flat), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+            self.log_dict(self.valid_metrics_cond(y_cond_decoded_flat, y_flat), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
             
         # log sample images
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):
-                predicted_y = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond[i].view(1, 512, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+                predicted_y = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond_decoded[i].view(1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+                predicted_y = predicted_y+y_cond_decoded[i].view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
+                
                 create_image(self.validation_folder, predicted_y.view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
 
+    def test_step(self, batch, batch_idx):
+        loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
+
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
+        
+        y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond_decoded.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+        
+        y_pred_flat = y_pred.view(-1)
+        y_flat = y.view(-1)
+        y_cond_decoded_flat = y_cond_decoded.view(-1)
+            
+        if(ptp(y_pred_flat) == 0.0):
+            y_pred_flat[0] += eps
+            
+        if(ptp(y_flat) == 0.0):
+            y_flat[0] += eps
+            
+        if(ptp(y_cond_decoded_flat) == 0.0):
+            y_cond_decoded_flat[0] += eps
+            
+        self.log_dict(self.valid_metrics(y_pred_flat, y_flat), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+        self.log_dict(self.valid_metrics_cond(y_cond_decoded_flat, y_flat), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+        
+        y = y.view(-1, 1, size_img, size_img)
+        y_pred = y_pred.view(-1, 1, size_img, size_img)
+        y_cond_decoded = y_cond_decoded.view(-1, 1, size_img, size_img)
+        
+        self.log_dict(self.valid_metrics_image(y_pred, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+        self.log_dict(self.valid_metrics_cond_image(y_cond_decoded, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+            
+        # log sample images
+        for i in range(0, x.shape[0]):
+            create_image("test_model_folder/", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
+            example_name = "example_%s_%s" % ("chr9", str(pos[1][i].item()))
+            self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % ("test_model_folder/", "final", str(pos[0][i]), str(pos[1][i].item()))])
+                
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        x, y, pos = batch
-        y_pred = self(x)
-
-        return y_pred
+        loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
+        
+        y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond_decoded.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+        y_pred = y_pred.view(-1, 1, size_img, size_img)
+        y_cond_decoded = y_cond_decoded.view(-1, 1, size_img, size_img)
+        
+        return y, y_pred, y_cond_decoded
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.0001)

@@ -15,3 +15,4 @@ wandb/
 hic/
 logs/
 *.ckpt
+test_model_folder/
