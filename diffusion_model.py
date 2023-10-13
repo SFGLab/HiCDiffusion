@@ -158,17 +158,17 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
         
         y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond_decoded.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+        y_pred = y_pred+y_cond_decoded.view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
         
         y_pred_flat = y_pred.view(-1)
         y_flat = y.view(-1)
-        y_cond_decoded_flat = y_cond_decoded.view(-1)
-            
+        y_cond_decoded_flat = y_cond_decoded.view(-1) 
         if(ptp(y_pred_flat) == 0.0):
             y_pred_flat[0] += eps
             
         if(ptp(y_flat) == 0.0):
             y_flat[0] += eps
-            
+                
         if(ptp(y_cond_decoded_flat) == 0.0):
             y_cond_decoded_flat[0] += eps
             
