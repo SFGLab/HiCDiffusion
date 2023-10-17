@@ -2,7 +2,6 @@ import argparse
 import os
 import shutil
 from subprocess import Popen, PIPE, DEVNULL, STDOUT
-import math
 
 DEBUG = 1
 

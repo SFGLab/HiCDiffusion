@@ -1,15 +1,9 @@
 import lightning.pytorch as pl
 import torch.nn as nn
-import torch.nn.functional as F
 import torch
 import math
 import matplotlib.pyplot as plt
-import numpy as np
-import shutil
-import pyranges as pr
-import pandas as pd
 import matplotlib
-import wandb
 from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
 from torchmetrics import MetricCollection
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC

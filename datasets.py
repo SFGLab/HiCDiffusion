@@ -7,7 +7,6 @@ import torch
 import lightning.pytorch as pl
 import torch.nn.functional as Fun
 import re
-import math
 from scipy.ndimage.filters import gaussian_filter
 import comparison_datasets
 from skimage.transform import resize
