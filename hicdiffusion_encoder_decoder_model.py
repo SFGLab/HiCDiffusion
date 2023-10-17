@@ -124,10 +124,12 @@ class ResidualConv2d(nn.Module):
 
         return self.relu(output+residual)    
     
-class HiCDiffEncoderDecoder(pl.LightningModule):
-    def __init__(self, validation_folder):
+class HiCDiffusionEncoderDecoder(pl.LightningModule):
+    def __init__(self, validation_folder, val_chr, test_chr):
         super().__init__()
         self.save_hyperparameters()
+        self.val_chr = val_chr
+        self.test_chr = test_chr
 
         self.example_input_array = torch.Tensor(2, 5, int(math.pow(2, 21)))
         self.validation_folder = validation_folder
@@ -187,8 +189,8 @@ class HiCDiffEncoderDecoder(pl.LightningModule):
         if(self.current_epoch >= 1):
             if(self.global_rank == 0):
                 for pos in starts_to_log:
-                    example_name = "example_%s_%s" % ("chr9", str(pos))
-                    self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, "chr9", str(pos))])
+                    example_name = "example_%s_%s" % (self.val_chr, str(pos))
+                    self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, self.val_chr, str(pos))])
 
     def validation_step(self, batch, batch_idx):
         x, y, pos = batch

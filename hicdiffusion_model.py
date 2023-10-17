@@ -9,7 +9,7 @@ from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageErr
 from torchmetrics.image import PeakSignalNoiseRatio, UniversalImageQualityIndex, ErrorRelativeGlobalDimensionlessSynthesis, MultiScaleStructuralSimilarityIndexMeasure, PeakSignalNoiseRatioWithBlockedEffect, RelativeAverageSpectralError, RootMeanSquaredErrorUsingSlidingWindow, SpectralDistortionIndex, StructuralSimilarityIndexMeasure, VisualInformationFidelity
 from torchmetrics import MetricCollection
 from denoise_model import UnetConditional, GaussianDiffusionConditional
-from hicdiff_encoder_decoder_model import HiCDiffEncoderDecoder
+from hicdiff_encoder_decoder_model import HiCDiffusionEncoderDecoder
 
 def ptp(input):
     return input.max() - input.min()
@@ -46,13 +46,15 @@ def create_image(folder, y_pred, y_cond, y_real, epoch, chromosome, position):
         plt.savefig(file_name, dpi=400)
         plt.cla()
     
-class HiCDiff(pl.LightningModule):
-    def __init__(self, validation_folder, encoder_decoder_model):
+class HiCDiffusion(pl.LightningModule):
+    def __init__(self, validation_folder, encoder_decoder_model, val_chr, test_chr):
         super().__init__()
+        self.val_chr = val_chr
+        self.test_chr = test_chr
         self.save_hyperparameters()
         self.validation_folder = validation_folder
         
-        self.encoder_decoder = HiCDiffEncoderDecoder.load_from_checkpoint(encoder_decoder_model)
+        self.encoder_decoder = HiCDiffusionEncoderDecoder.load_from_checkpoint(encoder_decoder_model)
         self.encoder_decoder.freeze()
         self.encoder_decoder.eval()
         self.model = UnetConditional(
@@ -114,8 +116,8 @@ class HiCDiff(pl.LightningModule):
         if(self.current_epoch >= 1):
             if(self.global_rank == 0):
                 for pos in starts_to_log:
-                    example_name = "example_%s_%s" % ("chr9", str(pos))
-                    self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, "chr9", str(pos))])
+                    example_name = "example_%s_%s" % (self.val_chr, str(pos))
+                    self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, self.val_chr, str(pos))])
 
     def validation_step(self, batch, batch_idx):
         loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
@@ -195,7 +197,7 @@ class HiCDiff(pl.LightningModule):
             self.pearson_table.append([pos[1][i].item(), pearson_calculated.item()])
             
             create_image("test_model_folder/", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
-            example_name = "example_%s_%s" % ("chr9", str(pos[1][i].item()))
+            example_name = "example_%s_%s" % (self.test_chr, str(pos[1][i].item()))
             self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % ("test_model_folder/", "final", str(pos[0][i]), str(pos[1][i].item()))])
 
 

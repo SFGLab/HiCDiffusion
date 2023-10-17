@@ -1,6 +1,6 @@
 import datasets
 import lightning.pytorch as pl
-from hicdiff_model import HiCDiff
+from hicdiffusion_model import HiCDiffusion
 from lightning.pytorch.callbacks import ModelSummary
 import os
 import shutil
@@ -13,20 +13,20 @@ def main(val_chr, test_chr, encoder_decoder_model):
     pl.seed_everything(1996)
     batch_size = 16
     
-    predictions_validation = "models/hicdiff_test_%s_val_%s/predictions_validation" % (test_chr, val_chr)
+    predictions_validation = "models/hicdiffusion_test_%s_val_%s/predictions_hicdiffusion" % (test_chr, val_chr)
 
     checkpoint_callback_best = ModelCheckpoint(
         save_top_k=1,
         monitor="val_loss",
-        dirpath=f"models/hicdiff_test_{test_chr}_val_{val_chr}/",
-        filename="best_val_loss_hicdiff",
+        dirpath=f"models/hicdiffusion_test_{test_chr}_val_{val_chr}/",
+        filename="best_val_loss_hicdiffusion",
         mode="min"
     )
     genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size, [val_chr], [test_chr])
 
-    model = HiCDiff(predictions_validation, encoder_decoder_model)
+    model = HiCDiffusion(predictions_validation, encoder_decoder_model, val_chr, test_chr)
 
-    logger = WandbLogger(project="HiCDiff", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
+    logger = WandbLogger(project="HiCDiffusion", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
     trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback_best], max_epochs=100, num_sanity_val_steps=1, accumulate_grad_batches=2)
     
     if(trainer.global_rank == 0):
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    print("Running training of HiCDiff. The configuration:", flush=True)
+    print("Running training of HiCDiffusion. The configuration:", flush=True)
     print(args, flush=True)
     print(flush=True)
     

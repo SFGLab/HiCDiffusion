@@ -1,6 +1,6 @@
 import datasets
 import lightning.pytorch as pl
-from hicdiff_model import HiCDiff
+from hicdiffusion_model import HiCDiffusion
 from lightning.pytorch.callbacks import ModelSummary
 import os
 import shutil
@@ -16,9 +16,9 @@ def main(val_chr, test_chr, model_ckpt):
 
     genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size, [val_chr], [test_chr])
 
-    model = HiCDiff.load_from_checkpoint(model_ckpt)
+    model = HiCDiffusion.load_from_checkpoint(model_ckpt)
 
-    logger = WandbLogger(project="HiCDiffTest", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
+    logger = WandbLogger(project="HiCDiffusionTest", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
     trainer = pl.Trainer(logger=logger, callbacks=[ModelSummary(max_depth=2)], devices=1, num_sanity_val_steps=0)
     
     if os.path.exists(test_model_folder) and os.path.isdir(test_model_folder):
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    print("Running testing of HiCDiff. The configuration:", flush=True)
+    print("Running testing of HiCDiffusion. The configuration:", flush=True)
     print(args, flush=True)
     print(flush=True)
     
