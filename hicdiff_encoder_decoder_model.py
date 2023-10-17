@@ -2,7 +2,6 @@ import lightning.pytorch as pl
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-from lightning.pytorch.utilities import grad_norm
 import math
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +10,7 @@ import pyranges as pr
 import pandas as pd
 import matplotlib
 import wandb
-from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef, SpearmanCorrCoef
+from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
 from torchmetrics import MetricCollection
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
@@ -131,14 +130,13 @@ class ResidualConv2d(nn.Module):
 
         return self.relu(output+residual)    
     
-class Interaction3DPredictor(pl.LightningModule):
-    def __init__(self, validation_folder, prediction_folder):
+class HiCDiffEncoderDecoder(pl.LightningModule):
+    def __init__(self, validation_folder):
         super().__init__()
         self.save_hyperparameters()
 
         self.example_input_array = torch.Tensor(2, 5, int(math.pow(2, 21)))
         self.validation_folder = validation_folder
-        self.prediction_folder = prediction_folder
 
         self.encoder = Encoder()
         self.decoder = Decoder()
@@ -146,7 +144,7 @@ class Interaction3DPredictor(pl.LightningModule):
 
         # metrics
         
-        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef(), SpearmanCorrCoef()
+        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef()
         ])
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')

@@ -79,25 +79,25 @@ class GenomicDataSet(Dataset):
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, reference_genome_file, bed_exclude, slide_size = 500_000, batch_size: int = 4):
+    def __init__(self, reference_genome_file, bed_exclude, slide_size = 500_000, batch_size: int = 4, val_chr = ["chr9"], test_chr = ["chr8"]):
         super().__init__()
         self.reference_genome_file = reference_genome_file
         self.bed_exclude = bed_exclude
         self.batch_size = batch_size
         self.slide_size = slide_size
+        self.val_chr = val_chr
+        self.test_chr = test_chr
 
     def setup(self, stage=None):
-        self.genomic_train = GenomicDataSet(self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in ["chr9"]], self.slide_size)
-        self.genomic_val = GenomicDataSet(self.reference_genome_file, self.bed_exclude, ["chr9"], self.slide_size)
+        self.genomic_train = GenomicDataSet(self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in self.val_chr+self.test_chr], self.slide_size)
+        self.genomic_val = GenomicDataSet(self.reference_genome_file, self.bed_exclude, self.val_chr, self.slide_size)
+        self.genomic_test = GenomicDataSet(self.reference_genome_file, self.bed_exclude, self.test_chr, self.slide_size)
 
     def train_dataloader(self):
         return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=True)
 
     def test_dataloader(self):
-        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
+        return DataLoader(self.genomic_test, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
     
     def val_dataloader(self):
-        return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
-
-    def predict_dataloader(self):
         return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)

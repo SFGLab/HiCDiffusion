@@ -1,7 +1,7 @@
 import torch
 import datasets
 import lightning.pytorch as pl
-from diffusion_model import Interaction3DPredictorDiffusion
+from hicdiff_model import HiCDiff
 from lightning.pytorch.callbacks import ModelSummary
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 import os
@@ -16,19 +16,17 @@ from datetime import datetime
 import argparse
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-def main(jobid):
+def main(val_chr, test_chr, model_ckpt):
     pl.seed_everything(1996)
-    
     batch_size = 16
     
-    test_model_folder = "test_model_folder/"
-    encoder_decoder_model = "final_model.ckpt" # ckpt 53 # NOT FINAL MODEL!!!
+    test_model_folder = "models/hicdiff_test_%s_val_%s/predictions_test" % (test_chr, val_chr)
 
-    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size)
+    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size, [val_chr], [test_chr])
 
-    model = Interaction3DPredictorDiffusion.load_from_checkpoint(encoder_decoder_model)
+    model = HiCDiff.load_from_checkpoint(model_ckpt)
 
-    logger = WandbLogger(project="Interaction3DPredictorDiffusionTest", log_model=True)
+    logger = WandbLogger(project="HiCDiffTest", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
     trainer = pl.Trainer(logger=logger, callbacks=[ModelSummary(max_depth=2)], devices=1, num_sanity_val_steps=0)
     
     if os.path.exists(test_model_folder) and os.path.isdir(test_model_folder):
@@ -50,8 +48,14 @@ if __name__ == "__main__":
                     description='What the program does',
                     epilog='Text at the bottom of help')
     parser.add_argument('-j', '--jobid', required=False)
+    parser.add_argument('-v', '--val_chr', required=True)
+    parser.add_argument('-t', '--test_chr', required=True)
+    parser.add_argument('-m', '--model', required=True)
+    
     args = parser.parse_args()
-    if(args.jobid):
-        main(args.jobid)
-    else:
-        main()
+    
+    print("Running testing of HiCDiff. The configuration:", flush=True)
+    print(args, flush=True)
+    print(flush=True)
+    
+    main(args.val_chr, args.test_chr, args.model)

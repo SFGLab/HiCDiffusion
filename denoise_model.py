@@ -5,6 +5,10 @@ import math
 from einops import rearrange, reduce, repeat
 import torch.nn.functional as F
 from tqdm import tqdm
+from functools import partial
+from collections import namedtuple
+ModelPrediction =  namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
+
 # def symmetricND(size: int, dims: int) -> torch.Tensor:
 #     data = torch.randn(*[size] * dims)
 #     return functools.reduce(
@@ -39,30 +43,35 @@ def extract(a, t, x_shape):
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
+def identity(t, *args, **kwargs):
+    return t
+
 class UnetConditional(Unet):
     
     def __init__(self, dim, dim_mults, flash_attn, channels):
         super().__init__(dim=dim, dim_mults=dim_mults, flash_attn=flash_attn, channels=channels)
         self.init_conv = nn.Identity() # we will handle initial conv ourselves :)
         
-        self.init_conv_x = nn.Conv2d(2, dim, 7, padding = 3)
-        # self.init_conv_x_cond = nn.Conv2d(512, dim, 7, padding = 3)
+        self.init_conv_x = nn.Conv2d(1, dim//2, 7, padding = 3)
+        self.init_conv_x_cond = nn.Conv2d(512, dim//2, 7, padding = 3)
 
     def forward(self, x, time, x_self_cond):
-        x = torch.cat((x, x_self_cond), 1)
-        x = self.init_conv_x(x)
+        x = torch.cat((self.init_conv_x(x), self.init_conv_x_cond(x_self_cond)), 1)
         x = super().forward(x, time)
         return x
 
 class GaussianDiffusionConditional(GaussianDiffusion):
     def __init__(self, model, image_size, timesteps, sampling_timesteps):
         super().__init__(model, image_size=image_size, timesteps=timesteps, sampling_timesteps=sampling_timesteps, auto_normalize=False)
-
+        
+    def make_symmetric_avg(self, A):
+        return (A + torch.transpose(A, 2, 3))/2
+    
     @torch.inference_mode()
     def p_sample(self, x, t: int, x_self_cond = None):
         b, *_, device = *x.shape, self.device
         batched_times = torch.full((b,), t, device = device, dtype = torch.long)
-        model_mean, _, model_log_variance, x_start = self.p_mean_variance(x = x, t = batched_times, x_self_cond = x_self_cond, clip_denoised = True)
+        model_mean, _, model_log_variance, x_start = self.p_mean_variance(x = x, t = batched_times, x_self_cond = x_self_cond, clip_denoised = False)
         noise = torch.randn_like(x) if t > 0 else 0. # no noise if t == 0
         pred_img = model_mean + (0.5 * model_log_variance).exp() * noise
         return pred_img, x_start
@@ -79,21 +88,13 @@ class GaussianDiffusionConditional(GaussianDiffusion):
         for t in reversed(range(0, self.num_timesteps)):
             self_cond = x_start if self.self_condition else None
             img, x_start = self.p_sample(img, t, cond)
+            img, x_start = self.make_symmetric_avg(img), self.make_symmetric_avg(x_start)
             imgs.append(img)
 
         ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
 
         ret = self.unnormalize(ret)
         return ret
-
-    def norm(self, tensor):
-        norm_min = 0
-        norm_max = 10
-        return 2*(tensor-norm_min)/(norm_max-norm_min)-1
-    def denorm(self, tensor):
-        norm_min = 0
-        norm_max = 10
-        return (tensor+1)/2*(norm_max-norm_min)+norm_min
     
     def p_losses(self, x_start, t, x_self_cond = None, noise = None, offset_noise_strength = None):
         b, c, h, w = x_start.shape
@@ -110,9 +111,9 @@ class GaussianDiffusionConditional(GaussianDiffusion):
 
         # noise sample
 
-        x = self.q_sample(x_start = x_start-x_self_cond, t = t, noise = noise)
+        x = self.q_sample(x_start = x_start, t = t, noise = noise)
 
-        model_out = self.model(x, t, x_self_cond)
+        model_out = self.make_symmetric_avg(self.model(x, t, x_self_cond))
 
         if self.objective == 'pred_noise':
             target = noise

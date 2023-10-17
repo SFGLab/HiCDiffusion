@@ -16,7 +16,7 @@ from torchmetrics.image import PeakSignalNoiseRatio, UniversalImageQualityIndex,
 from torchmetrics import MetricCollection
 from denoise_model import UnetConditional, GaussianDiffusionConditional
 from tqdm import tqdm
-from model import Interaction3DPredictor
+from hicdiff_encoder_decoder_model import HiCDiffEncoderDecoder
 
 def ptp(input):
     return input.max() - input.min()
@@ -39,9 +39,9 @@ def create_image(folder, y_pred, y_cond, y_real, epoch, chromosome, position):
 
         fig.suptitle('Output %s - %s %s' % (epoch, chromosome, str(position)))
         axs["TopLeft"].set_title('Predicted - final')
-        axs["TopLeft"].imshow(y_pred, cmap=color_map, vmin=0, vmax=5)
+        axs["TopLeft"].imshow(y_pred, cmap=color_map_diff, vmin=-5, vmax=5)
         axs["TopRight"].set_title('Predicted - E/D')
-        axs["TopRight"].imshow(y_cond, cmap=color_map, vmin=0, vmax=5)
+        axs["TopRight"].imshow(y_cond, cmap=color_map_diff, vmin=-5, vmax=5)
         pearson = PearsonCorrCoef()
         axs["MiddleLeft"].set_title('Difference - final (PCC: %s)' % str(round(pearson(y_pred.view(-1), y_real.view(-1)).item(), 4)))
         axs["MiddleLeft"].imshow(y_real-y_pred, cmap=color_map_diff, vmin=-5, vmax=5)
@@ -53,13 +53,13 @@ def create_image(folder, y_pred, y_cond, y_real, epoch, chromosome, position):
         plt.savefig(file_name, dpi=400)
         plt.cla()
     
-class Interaction3DPredictorDiffusion(pl.LightningModule):
+class HiCDiff(pl.LightningModule):
     def __init__(self, validation_folder, encoder_decoder_model):
         super().__init__()
         self.save_hyperparameters()
         self.validation_folder = validation_folder
         
-        self.encoder_decoder = Interaction3DPredictor.load_from_checkpoint(encoder_decoder_model)
+        self.encoder_decoder = HiCDiffEncoderDecoder.load_from_checkpoint(encoder_decoder_model)
         self.encoder_decoder.freeze()
         self.encoder_decoder.eval()
         self.model = UnetConditional(
@@ -72,8 +72,8 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         self.diffusion = GaussianDiffusionConditional(
             self.model,
             image_size = 256,
-            timesteps = 1000,
-            sampling_timesteps = 1000 # number of steps - change to 999 later
+            timesteps = 10,
+            sampling_timesteps = 10
         )
 
 
@@ -86,6 +86,8 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         self.valid_metrics_cond = metrics.clone(prefix='val_cond_')
         self.valid_metrics_image = metrics_image.clone(prefix='val_image_')
         self.valid_metrics_cond_image = metrics_image.clone(prefix='val_cond_image_')
+        
+        self.pearson_table = []
 
     def process_batch(self, batch):
         x, y, pos = batch
@@ -98,8 +100,8 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         y_cond_decoded = y_cond_decoded.view(-1, size_img, size_img)
         
         y_cond = y_cond.view(-1, 512, size_img, size_img)
-        loss = self.diffusion(y, x_self_cond=y_cond_decoded.view(-1, 1, size_img, size_img))
-
+        loss = self.diffusion(y-y_cond_decoded.view(-1, 1, size_img, size_img), x_self_cond=y_cond)
+        
         return loss, x, y, y_cond, y_cond_decoded, pos
 
     def training_step(self, batch, batch_idx):
@@ -112,6 +114,9 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
     def on_train_epoch_end(self):
         print('\n')
     
+    def on_test_epoch_end(self):
+        self.logger.log_table(key="pearson", columns=["pos", "pearson"], data=self.pearson_table)
+        
     def on_validation_epoch_end(self): # upload from previous epoch
         if(self.current_epoch >= 1):
             if(self.global_rank == 0):
@@ -126,8 +131,8 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         
         # every 10 epoch - log statistics, which means generating all the images
         if(self.current_epoch % 10 == 9):
-            y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond_decoded.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
-            y_pred = y_pred+y_cond_decoded.view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
+            y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond, return_all_timesteps=False) # (1, 1, 256, 256)
+            y_pred = nn.functional.relu(y_pred+y_cond_decoded.view(-1, 1, size_img, size_img)) # the y_pred is in form of y - y_cond
             
             y_pred_flat = y_pred.view(-1)
             y_flat = y.view(-1)
@@ -147,17 +152,24 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         # log sample images
         for i in range(0, x.shape[0]):
             if(pos[1][i].item() in starts_to_log):
-                predicted_y = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond_decoded[i].view(1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
-                predicted_y = predicted_y+y_cond_decoded[i].view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
+                if(self.trainer.sanity_checking):
+                    epoch = "_0"
+                else:
+                    epoch = self.current_epoch
+                predicted_y = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond[i].view(1, 512, size_img, size_img), return_all_timesteps=False) # (1, 1, 256, 256)
+                predicted_y_r = nn.functional.relu(predicted_y+y_cond_decoded[i].view(-1, 1, size_img, size_img)) # the y_pred is in form of y - y_cond
+                predicted_y_rm = nn.functional.relu(y_cond_decoded[i].view(-1, 1, size_img, size_img)-predicted_y) # the y_pred is in form of y - y_cond
                 
-                create_image(self.validation_folder, predicted_y.view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), self.current_epoch, pos[0][i], pos[1][i].item())
+                create_image(self.validation_folder, predicted_y_r.view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), epoch, pos[0][i], pos[1][i].item())
+                create_image(self.validation_folder, predicted_y.view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "R"+str(epoch), pos[0][i], pos[1][i].item())
+                create_image(self.validation_folder, predicted_y_rm.view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "RM"+str(epoch), pos[0][i], pos[1][i].item())
 
     def test_step(self, batch, batch_idx):
         loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
         
-        y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond_decoded.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+        y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond, return_all_timesteps=False) # (1, 1, 256, 256)
         y_pred = y_pred+y_cond_decoded.view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
         
         y_pred_flat = y_pred.view(-1)
@@ -181,18 +193,23 @@ class Interaction3DPredictorDiffusion(pl.LightningModule):
         
         self.log_dict(self.valid_metrics_image(y_pred, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
         self.log_dict(self.valid_metrics_cond_image(y_cond_decoded, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+        
             
         # log sample images
         for i in range(0, x.shape[0]):
+            pearson = PearsonCorrCoef().to(y.device)
+            pearson_calculated = pearson(y_pred[i].view(-1), y[i].view(-1))
+            self.pearson_table.append([pos[1][i].item(), pearson_calculated.item()])
+            
             create_image("test_model_folder/", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
             example_name = "example_%s_%s" % ("chr9", str(pos[1][i].item()))
             self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % ("test_model_folder/", "final", str(pos[0][i]), str(pos[1][i].item()))])
-                
+
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
         
-        y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond_decoded.view(-1, 1, 256, 256), return_all_timesteps=False) # (1, 1, 256, 256)
+        y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond, return_all_timesteps=False) # (1, 1, 256, 256)
         y_pred = y_pred.view(-1, 1, size_img, size_img)
         y_cond_decoded = y_cond_decoded.view(-1, 1, size_img, size_img)
         
