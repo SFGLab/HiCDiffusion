@@ -9,27 +9,6 @@ from functools import partial
 from collections import namedtuple
 ModelPrediction =  namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
 
-# def symmetricND(size: int, dims: int) -> torch.Tensor:
-#     data = torch.randn(*[size] * dims)
-#     return functools.reduce(
-#         operator.add,
-#         (
-#             torch.permute(data, permutation)
-#             for permutation in itertools.permutations(range(dims))
-#         ),
-#     )
-
-# def random_symetric(shape, device):
-#     tensor_list = []
-#     for i in range(0, shape[0]):
-#         tensor = symmetricND(shape[2], 2).to(device).view(1, 1, shape[2], shape[3])
-#         tensor_list.append(tensor)
-#     tensor = torch.cat(tensor_list)
-#     return tensor
-
-# def randn_like_symetric(img):
-#     return random_symetric(img.shape, img.device)
-
 def exists(x):
     return x is not None
 
