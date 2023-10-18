@@ -11,7 +11,7 @@ from torchmetrics import MetricCollection
 def ptp(input):
     return input.max() - input.min()
 
-starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 89_020_000, 97_520_000, 126_020_000} # HiChIP - added one interesting region
+starts_to_log = {18_100_000, 27_600_000, 36_600_000} # HiChIP - added one interesting region
 eps = 1e-7
 
 def create_image(folder, y_pred, y_real, epoch, chromosome, position):
