@@ -9,8 +9,8 @@ from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageErr
 from torchmetrics.image import PeakSignalNoiseRatio, UniversalImageQualityIndex, ErrorRelativeGlobalDimensionlessSynthesis, MultiScaleStructuralSimilarityIndexMeasure, PeakSignalNoiseRatioWithBlockedEffect, RelativeAverageSpectralError, RootMeanSquaredErrorUsingSlidingWindow, SpectralDistortionIndex, StructuralSimilarityIndexMeasure, VisualInformationFidelity
 from torchmetrics import MetricCollection
 from denoise_model import UnetConditional, GaussianDiffusionConditional
-from hicdiff_encoder_decoder_model import HiCDiffusionEncoderDecoder
-
+from hicdiffusion_encoder_decoder_model import HiCDiffusionEncoderDecoder
+from torchmetrics.image.fid import FrechetInceptionDistance
 def ptp(input):
     return input.max() - input.min()
 
@@ -50,6 +50,7 @@ class HiCDiffusion(pl.LightningModule):
         super().__init__()
         self.val_chr = val_chr
         self.test_chr = test_chr
+        
         self.save_hyperparameters()
         self.validation_folder = validation_folder
         
@@ -75,6 +76,9 @@ class HiCDiffusion(pl.LightningModule):
         ])
         metrics_image = MetricCollection([ PeakSignalNoiseRatio(),  UniversalImageQualityIndex(), ErrorRelativeGlobalDimensionlessSynthesis(), MultiScaleStructuralSimilarityIndexMeasure(), PeakSignalNoiseRatioWithBlockedEffect(), RelativeAverageSpectralError(), RootMeanSquaredErrorUsingSlidingWindow(), SpectralDistortionIndex(), StructuralSimilarityIndexMeasure(), VisualInformationFidelity()
         ])
+
+        self.fid_cond = None
+        self.fid = None
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
         self.valid_metrics_cond = metrics.clone(prefix='val_cond_')
@@ -107,9 +111,15 @@ class HiCDiffusion(pl.LightningModule):
     
     def on_train_epoch_end(self):
         print('\n')
-    
+
+    def on_test_epoch_start(self):
+        self.fid = FrechetInceptionDistance(feature=64, normalize=True).to(0)
+        self.fid_cond = FrechetInceptionDistance(feature=64, normalize=True).to(0)
+
     def on_test_epoch_end(self):
         self.logger.log_table(key="pearson", columns=["pos", "pearson"], data=self.pearson_table)
+        self.log("fid", self.fid.compute())
+        self.log("fid_cond", self.fid_cond.compute())
         
     def on_validation_epoch_end(self): # upload from previous epoch
         if(self.current_epoch >= 1):
@@ -186,6 +196,11 @@ class HiCDiffusion(pl.LightningModule):
         y_cond_decoded = y_cond_decoded.view(-1, 1, size_img, size_img)
         
         self.log_dict(self.valid_metrics_image(y_pred, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+        self.log_dict(self.valid_metrics_cond_image(y_cond_decoded, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
+        self.fid.update(nn.functional.normalize(y_pred, dim=0).repeat(1, 3, 1, 1), real=False)
+        self.fid.update(nn.functional.normalize(y, dim=0).repeat(1, 3, 1, 1), real=True)
+        self.fid_cond.update(nn.functional.normalize(y_cond_decoded, dim=0).repeat(1, 3, 1, 1), real=False)
+        self.fid_cond.update(nn.functional.normalize(y, dim=0).repeat(1, 3, 1, 1), real=True)
         self.log_dict(self.valid_metrics_cond_image(y_cond_decoded, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
         
             
