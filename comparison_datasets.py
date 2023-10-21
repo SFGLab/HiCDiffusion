@@ -12,11 +12,11 @@ class HiComparison():
         start_bin = int(start / res)
         range_bin = int(window / res)
         end_bin = start_bin + range_bin
-        hic_mat = self.diag_to_mat(self.hic, start_bin, end_bin)
+        hic_mat = np.log(self.diag_to_mat(self.hic, start_bin, end_bin)+1)
         return hic_mat
 
     def load_hic(self, path):
-        print(f'Reading Hi-C: {path}')
+        #print(f'Reading Hi-C: {path}')
         return dict(np.load(path))
 
     def diag_to_mat(self, ori_load, start, end):
