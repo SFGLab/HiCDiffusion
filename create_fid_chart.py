@@ -92,8 +92,9 @@ def main():
     genomic_data_module.setup()
 
     for value in iter(genomic_data_module.test_dataloader()):
-        create_image(value[1][0].view(1, 1, 256, 256), value[2][0][0], value[2][1][0].item(), value[2][2][0].item())
-        pass
+        if(int(value[2][1][0].item()) == 8600000):
+            create_image(value[1][0].view(1, 1, 256, 256), value[2][0][0], value[2][1][0].item(), value[2][2][0].item())
+            break
 
     
 
