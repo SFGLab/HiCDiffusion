@@ -11,14 +11,14 @@ from torchmetrics import MetricCollection
 from denoise_model import UnetConditional, GaussianDiffusionConditional
 from hicdiffusion_encoder_decoder_model import HiCDiffusionEncoderDecoder
 from torchmetrics.image.fid import FrechetInceptionDistance
+import os
+
 def ptp(input):
     return input.max() - input.min()
 
 size_img = 256
 
-#starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
-
-starts_to_log = {18_100_000, 27_600_000, 36_600_000} # HiChIP - added one interesting region
+starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
 eps = 1e-7
 
@@ -126,7 +126,9 @@ class HiCDiffusion(pl.LightningModule):
             if(self.global_rank == 0):
                 for pos in starts_to_log:
                     example_name = "example_%s_%s" % (self.val_chr, str(pos))
-                    self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, self.val_chr, str(pos))])
+                    path_to_img = "%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, self.val_chr, str(pos))
+                    if(os.path.isfile(path_to_img)): # sometimes it might be missing - e.g. is in centromere
+                        self.logger.log_image(key = example_name, images=[path_to_img])
 
     def validation_step(self, batch, batch_idx):
         loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
@@ -210,9 +212,9 @@ class HiCDiffusion(pl.LightningModule):
             pearson_calculated = pearson(y_pred[i].view(-1), y[i].view(-1))
             self.pearson_table.append([pos[1][i].item(), pearson_calculated.item()])
             
-            create_image("test_model_folder/", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
+            create_image(f"models/hicdiffusion_test_{self.test_chr}_val_{self.val_chr}/predictions_test", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
             example_name = "example_%s_%s" % (self.test_chr, str(pos[1][i].item()))
-            self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % ("test_model_folder/", "final", str(pos[0][i]), str(pos[1][i].item()))])
+            self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (f"models/hicdiffusion_test_{self.test_chr}_val_{self.val_chr}/predictions_test", "final", str(pos[0][i]), str(pos[1][i].item()))])
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):

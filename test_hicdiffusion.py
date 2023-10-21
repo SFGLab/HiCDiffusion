@@ -12,7 +12,7 @@ def main(val_chr, test_chr, model_ckpt):
     pl.seed_everything(1996)
     batch_size = 16
     
-    test_model_folder = "models/hicdiff_test_%s_val_%s/predictions_test" % (test_chr, val_chr)
+    test_model_folder = "models/hicdiffusion_test_%s_val_%s/predictions_test" % (test_chr, val_chr)
 
     genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size, [val_chr], [test_chr])
 
