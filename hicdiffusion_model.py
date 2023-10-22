@@ -13,6 +13,13 @@ from hicdiffusion_encoder_decoder_model import HiCDiffusionEncoderDecoder
 from torchmetrics.image.fid import FrechetInceptionDistance
 import os
 
+def normalize(A):
+    A = A.view(-1, 256, 256)
+    outmap_min, _ = torch.min(A, dim=1, keepdim=True)
+    outmap_max, _ = torch.max(A, dim=1, keepdim=True)
+    outmap = (A - outmap_min) / (outmap_max - outmap_min)
+    return outmap.view(-1, 1, 256, 256)
+
 def ptp(input):
     return input.max() - input.min()
 
@@ -199,10 +206,10 @@ class HiCDiffusion(pl.LightningModule):
         
         self.log_dict(self.valid_metrics_image(y_pred, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
         self.log_dict(self.valid_metrics_cond_image(y_cond_decoded, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
-        self.fid.update(nn.functional.normalize(y_pred, dim=0).repeat(1, 3, 1, 1), real=False)
-        self.fid.update(nn.functional.normalize(y, dim=0).repeat(1, 3, 1, 1), real=True)
-        self.fid_cond.update(nn.functional.normalize(y_cond_decoded, dim=0).repeat(1, 3, 1, 1), real=False)
-        self.fid_cond.update(nn.functional.normalize(y, dim=0).repeat(1, 3, 1, 1), real=True)
+        self.fid.update(normalize(y_pred).repeat(1, 3, 1, 1), real=False)
+        self.fid.update(normalize(y).repeat(1, 3, 1, 1), real=True)
+        self.fid_cond.update(normalize(y_cond_decoded).repeat(1, 3, 1, 1), real=False)
+        self.fid_cond.update(normalize(y).repeat(1, 3, 1, 1), real=True)
         self.log_dict(self.valid_metrics_cond_image(y_cond_decoded, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
         
             

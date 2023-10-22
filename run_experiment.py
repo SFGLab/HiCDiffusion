@@ -27,7 +27,7 @@ parser.add_argument('-t', '--test_chr', required=True)
 
 args = parser.parse_args()
 
-print("Running HiCDiffusion pipeline. The configuration:")
+print("Running HiCDiffusion train pipeline. The configuration:")
 print(args)
 print()
 
@@ -40,4 +40,3 @@ os.makedirs(main_folder)
 
 execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion_test_{args.test_chr}_val_{args.val_chr}/train_hicdiffusion_encoder_decoder.log train_hicdiffusion_encoder_decoder.slurm -t {args.test_chr} -v {args.val_chr}")
 execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion_test_{args.test_chr}_val_{args.val_chr}/train_hicdiffusion.log train_hicdiffusion.slurm -t {args.test_chr} -v {args.val_chr} -m models/hicdiffusion_test_{args.test_chr}_val_{args.val_chr}/best_val_loss_encoder_decoder.ckpt")
-execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion_test_{args.test_chr}_val_{args.val_chr}/test_hicdiffusion.log test_hicdiffusion.slurm -t {args.test_chr} -v {args.val_chr} -m models/hicdiffusion_test_{args.test_chr}_val_{args.val_chr}/best_val_loss_hicdiffusion.ckpt")

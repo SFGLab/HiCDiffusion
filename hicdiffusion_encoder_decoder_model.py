@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef
 from torchmetrics import MetricCollection
+import os
 #starts_to_log = {18_100_000, 27_600_000, 36_600_000, 74_520_000, 83_520_000, 97_520_000, 110_020_000, 126_020_000} # HiC
 
 def ptp(input):
@@ -190,7 +191,9 @@ class HiCDiffusionEncoderDecoder(pl.LightningModule):
             if(self.global_rank == 0):
                 for pos in starts_to_log:
                     example_name = "example_%s_%s" % (self.val_chr, str(pos))
-                    self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, self.val_chr, str(pos))])
+                    path_to_img = "%s/%s_%s_%s.png" % (self.validation_folder, self.current_epoch-1, self.val_chr, str(pos))
+                    if(os.path.isfile(path_to_img)): # sometimes it might be missing - e.g. is in centromere
+                        self.logger.log_image(key = example_name, images=[path_to_img])
 
     def validation_step(self, batch, batch_idx):
         x, y, pos = batch
