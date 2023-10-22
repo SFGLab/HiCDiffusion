@@ -19,7 +19,7 @@ def normalize(A):
     outmap = (A - outmap_min) / (outmap_max - outmap_min)
     return outmap.view(-1, 1, 256, 256)
 
-def create_image(y_real_value, chromosome, position, pos_end):
+def create_image_fid_chart(y_real_value, chromosome, position, pos_end):
     y_real_value_tensor = normalize(y_real_value.view(256*256)).view(1, 1, 256, 256).repeat(1, 3, 1, 1).detach()
     y_real_value = y_real_value.view(256, 256).detach().numpy()
 
@@ -30,7 +30,7 @@ def create_image(y_real_value, chromosome, position, pos_end):
 
     fig.suptitle('FID score of augmented data %s %s-%s' % (chromosome, str(position), str(pos_end)))
 
-    axs["Gauss_0"].set_title('Real data (no gauss)')
+    axs["Gauss_0"].set_title('Real data')
     axs["Gauss_0"].imshow(y_real_value, cmap=color_map, vmin=0, vmax=5)
     fid = FrechetInceptionDistance(feature=64, normalize=True).set_dtype(torch.float64)
     # limitation of torchmetrics library - we need to provide at least 2 or more images from each distribution; 
@@ -83,21 +83,26 @@ def create_image(y_real_value, chromosome, position, pos_end):
     plt.savefig(file_name, dpi=400)
     plt.cla()
 
+def create_image(y_pred):
+        color_map_diff = matplotlib.colors.LinearSegmentedColormap.from_list("", ["blue", "white","red"])
+        plt.figure(figsize=(4, 4))
+        plt.imshow(y_pred, cmap=color_map_diff, vmin=-1, vmax=1)
+        plt.savefig("noise.svg", dpi=400)
+        plt.cla()
+
 def main():
 
     pl.seed_everything(1996)
     batch_size = 1
-    
-    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, 1, ["chr9"], ["chr8"])
+    #noise = torch.randn((256, 256))
+    #create_image(noise)
+    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, 1, ["chr8"], ["chr9"])
     genomic_data_module.setup()
 
     for value in iter(genomic_data_module.test_dataloader()):
-        if(int(value[2][1][0].item()) == 8600000):
-            create_image(value[1][0].view(1, 1, 256, 256), value[2][0][0], value[2][1][0].item(), value[2][2][0].item())
-            break
-
-    
-
+        if(int(value[2][1][0].item()) == 8_600_000):
+            create_image_fid_chart(value[1][0].view(1, 1, 256, 256), value[2][0][0], value[2][1][0].item(), value[2][2][0].item())
+        
 if __name__ == "__main__":
 
     main()
