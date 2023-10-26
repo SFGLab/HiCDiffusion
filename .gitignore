@@ -20,3 +20,5 @@ gen_all_exp.py
 run_all_experiments.sh
 *top*
 models/
+scripts/results_csv/
+scripts/out/
