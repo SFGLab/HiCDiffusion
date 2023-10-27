@@ -32,7 +32,7 @@ class DatasetWrapper():
         self.comparison_dataset = {}
         for chromosome in normal_chromosomes:
             self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
-            self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
+            self.comparison_dataset[chromosome].load("../hic/%s.npz" % chromosome)
     def get_real_y(self, chromosome, pos):
         return resize(torch.Tensor(self.comparison_dataset[chromosome].get(pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
 
@@ -44,8 +44,8 @@ for chromosome in normal_chromosomes:
     fid = FrechetInceptionDistance(feature=64, normalize=True)
     for file in glob.glob(f"out/gm12878/prediction/npy/{chromosome}_*.npy"):
         pos = int(file.split(f"out/gm12878/prediction/npy/{chromosome}_")[1].split(".npy")[0])
-        y_real = torch.tensor(np.load(file))
-        y_predicted = torch.Tensor(dataset_wrapper.get_real_y(chromosome, pos))
+        y_predicted = torch.tensor(np.load(file))
+        y_real = torch.Tensor(dataset_wrapper.get_real_y(chromosome, pos))
 
         fid.update(normalize(y_predicted).repeat(1, 3, 1, 1), real=False)
         fid.update(normalize(y_real).repeat(1, 3, 1, 1), real=True)
