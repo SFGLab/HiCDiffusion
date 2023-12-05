@@ -14,7 +14,7 @@ Diffusion-based, from-sequence Hi-C matrices predictor.
 
 ## Citation
 
-If you use ConsensuSV in your research, we kindly ask you to cite the following publication:
+If you use HiCDiffusion in your research, we kindly ask you to cite the following publication:
 
 ```
 TBD
