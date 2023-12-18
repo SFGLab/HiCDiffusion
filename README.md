@@ -14,11 +14,17 @@ Diffusion-based, from-sequence Hi-C matrices predictor.
 
 ## Citation
 
-If you use ConsensuSV in your research, we kindly ask you to cite the following publication:
+If you use HiCDiffusion in your research, we kindly ask you to cite the following publication:
 
 ```
 TBD
 ```
+## Data
+
+To test the software using data from C.Origami, download the data from there:
+https://zenodo.org/record/7226561/files/corigami_data_gm12878_add_on.tar.gz?download=1
+And get the hic folder to the main folder of the software. You should also get reference genome and put it into the main folder, e.g., GRCh38_full_analysis_set_plus_decoy_hla.fa (which can be obtained from 1000 Genomes project: https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/)
+
 
 ## Requirements
 
