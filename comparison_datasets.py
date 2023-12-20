@@ -8,7 +8,7 @@ class HiComparison():
     def load(self, path = None):
         self.hic = self.load_hic(path)
 
-    def get(self, start, window = 2097152, res = 10000):
+    def get(self, chromosome, start, window = 2097152, res = 10000):
         start_bin = int(start / res)
         range_bin = int(window / res)
         end_bin = start_bin + range_bin

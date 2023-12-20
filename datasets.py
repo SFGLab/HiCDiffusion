@@ -9,21 +9,29 @@ import torch.nn.functional as Fun
 import re
 from scipy.ndimage.filters import gaussian_filter
 import comparison_datasets
+import hic_dataset
 from skimage.transform import resize
 
 normal_chromosomes = ["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]
 window_size = 2_000_000
 output_res = 10_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N"
-num_workers_loader = 8
+num_workers_loader = 8 # in case of .hic, each loader uses around 16GB ram
 size_img = 256
 
 class GenomicDataSet(Dataset):
-    def __init__(self, reference_genome_file, bed_exclude, chromosomes, slide_size):
-        self.comparison_dataset = {}
+    def __init__(self, reference_genome_file, bed_exclude, chromosomes, slide_size, hic_file_name=""):
+        self.hic_dataset = {}
+        if(hic_file_name != ""):
+            hic_dataset_full = hic_dataset.HiCDataset(hic_file_name, output_res)
         for chromosome in chromosomes:
-            self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
-            self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
+            if(hic_file_name == ""):
+                self.hic_dataset[chromosome] = comparison_datasets.HiComparison()
+                self.hic_dataset[chromosome].load("hic/%s.npz" % chromosome)
+            else:
+                self.hic_dataset[chromosome] = hic_dataset_full
+                
+                
 
         self.slide_size = slide_size
 
@@ -67,7 +75,7 @@ class GenomicDataSet(Dataset):
         window = self.windows.iloc[idx]
         length_to_input = 97152 # correction for input to network - easier to ooperate whith maxpooling when ^2
         sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_input/2):window["End"]+int(length_to_input/2)]
-        return self.sequence_to_onehot(sequence), resize(torch.Tensor(self.comparison_dataset[window["Chromosome"]].get(window["Start"]-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True), [window["Chromosome"], window["Start"], window["End"]]
+        return self.sequence_to_onehot(sequence), resize(torch.Tensor(self.hic_dataset[window["Chromosome"]].get(window["Chromosome"], window["Start"]-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True), [window["Chromosome"], window["Start"], window["End"]]
 
     def sequence_to_onehot(self, sequence):
         sequence = re.sub(unwanted_chars, "N", sequence).replace("A", "0").replace("C", "1").replace("T", "2").replace("G", "3").replace("N", "4")
@@ -78,7 +86,7 @@ class GenomicDataSet(Dataset):
     
 
 class GenomicDataModule(pl.LightningDataModule):
-    def __init__(self, reference_genome_file, bed_exclude, slide_size = 500_000, batch_size: int = 4, val_chr = ["chr9"], test_chr = ["chr8"]):
+    def __init__(self, reference_genome_file, bed_exclude, slide_size = 500_000, batch_size: int = 4, val_chr = ["chr9"], test_chr = ["chr8"], hic_file_name=""):
         super().__init__()
         self.reference_genome_file = reference_genome_file
         self.bed_exclude = bed_exclude
@@ -86,11 +94,12 @@ class GenomicDataModule(pl.LightningDataModule):
         self.slide_size = slide_size
         self.val_chr = val_chr
         self.test_chr = test_chr
+        self.hic_file_name=hic_file_name
 
     def setup(self, stage=None):
-        self.genomic_train = GenomicDataSet(self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in self.val_chr+self.test_chr], self.slide_size)
-        self.genomic_val = GenomicDataSet(self.reference_genome_file, self.bed_exclude, self.val_chr, self.slide_size)
-        self.genomic_test = GenomicDataSet(self.reference_genome_file, self.bed_exclude, self.test_chr, self.slide_size)
+        self.genomic_train = GenomicDataSet(self.reference_genome_file, self.bed_exclude, [x for x in normal_chromosomes if x not in self.val_chr+self.test_chr], self.slide_size, self.hic_file_name)
+        self.genomic_val = GenomicDataSet(self.reference_genome_file, self.bed_exclude, self.val_chr, self.slide_size, self.hic_file_name)
+        self.genomic_test = GenomicDataSet(self.reference_genome_file, self.bed_exclude, self.test_chr, self.slide_size, self.hic_file_name)
 
     def train_dataloader(self):
         return DataLoader(self.genomic_train, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=True)
