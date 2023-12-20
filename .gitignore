@@ -21,3 +21,4 @@ run_all_experiments.sh
 models/
 scripts/results_csv/
 scripts/out/
+*mcool
