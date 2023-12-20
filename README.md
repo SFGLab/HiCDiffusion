@@ -40,6 +40,7 @@ Requirements:
 * pyranges
 * scikit-image
 * scipy
+* hicstraw
 
 
 The full way of training can be done using the following command:

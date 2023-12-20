@@ -8,17 +8,21 @@ from lightning.pytorch.loggers import WandbLogger
 import time
 import argparse
 
-def main(val_chr, test_chr, model_ckpt):
+def main(val_chr, test_chr, model_ckpt, hic_filename=""):
+    if(hic_filename != ""):
+        filename_prefix = "_"+hic_filename
+    else:
+        filename_prefix = ""
     pl.seed_everything(1996)
     batch_size = 16
     
-    test_model_folder = "models/hicdiffusion_test_%s_val_%s/predictions_test" % (test_chr, val_chr)
+    test_model_folder = "models/hicdiffusion%s_test_%s_val_%s/predictions_test" % (filename_prefix, test_chr, val_chr)
 
-    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size, [val_chr], [test_chr])
+    genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size, [val_chr], [test_chr], hic_filename)
 
     model = HiCDiffusion.load_from_checkpoint(model_ckpt)
 
-    logger = WandbLogger(project="HiCDiffusionTest", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
+    logger = WandbLogger(project=f"HiCDiffusionTest{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
     trainer = pl.Trainer(logger=logger, callbacks=[ModelSummary(max_depth=2)], devices=1, num_sanity_val_steps=0)
     
     if os.path.exists(test_model_folder) and os.path.isdir(test_model_folder):
@@ -43,6 +47,7 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--val_chr', required=True)
     parser.add_argument('-t', '--test_chr', required=True)
     parser.add_argument('-m', '--model', required=True)
+    parser.add_argument('-f', '--hic_filename', required=False, default="")
     
     args = parser.parse_args()
     
@@ -50,4 +55,4 @@ if __name__ == "__main__":
     print(args, flush=True)
     print(flush=True)
     
-    main(args.val_chr, args.test_chr, args.model)
+    main(args.val_chr, args.test_chr, args.model, args.hic_filename)
