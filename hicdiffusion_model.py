@@ -53,12 +53,13 @@ def create_image(folder, y_pred, y_cond, y_real, epoch, chromosome, position):
         plt.cla()
     
 class HiCDiffusion(pl.LightningModule):
-    def __init__(self, validation_folder, encoder_decoder_model, val_chr, test_chr):
+    def __init__(self, hic_filename, validation_folder, encoder_decoder_model, val_chr, test_chr):
         super().__init__()
         self.val_chr = val_chr
         self.test_chr = test_chr
         
         self.save_hyperparameters()
+        self.hic_filename = hic_filename
         self.validation_folder = validation_folder
         
         self.encoder_decoder = HiCDiffusionEncoderDecoder.load_from_checkpoint(encoder_decoder_model)
@@ -219,9 +220,9 @@ class HiCDiffusion(pl.LightningModule):
             pearson_calculated = pearson(y_pred[i].view(-1), y[i].view(-1))
             self.pearson_table.append([pos[1][i].item(), pearson_calculated.item()])
             
-            create_image(f"models/hicdiffusion_test_{self.test_chr}_val_{self.val_chr}/predictions_test", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
+            create_image(f"models/hicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
             example_name = "example_%s_%s" % (self.test_chr, str(pos[1][i].item()))
-            self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (f"models/hicdiffusion_test_{self.test_chr}_val_{self.val_chr}/predictions_test", "final", str(pos[0][i]), str(pos[1][i].item()))])
+            self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (f"models/hicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", "final", str(pos[0][i]), str(pos[1][i].item()))])
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):

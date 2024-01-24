@@ -33,17 +33,19 @@ print(args)
 print()
 
 hic_filename = args.file
-if(hic_filename != ""):
+if not(hic_filename is None):
     filename_prefix = "_"+hic_filename
 else:
     filename_prefix = ""
     
 main_folder = "models/hicdiffusion%s_test_%s_val_%s" % (filename_prefix, args.test_chr, args.val_chr)
 
-# if os.path.exists(main_folder) and os.path.isdir(main_folder):
-#     shutil.rmtree(main_folder)
-# os.makedirs(main_folder)
-
-
-# execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/train_hicdiffusion_encoder_decoder.log train_hicdiffusion_encoder_decoder.slurm -t {args.test_chr} -v {args.val_chr} -f {hic_filename}")
-execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/train_hicdiffusion.log train_hicdiffusion.slurm -t {args.test_chr} -v {args.val_chr} -m models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/best_val_loss_encoder_decoder.ckpt -f {hic_filename}")
+if os.path.exists(main_folder) and os.path.isdir(main_folder):
+    shutil.rmtree(main_folder)
+os.makedirs(main_folder)
+if not(hic_filename is None):
+    hic_filename = f"-f {hic_filename}"
+else:
+    hic_filename = ""
+execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/train_hicdiffusion.log train_hicdiffusion_encoder_decoder.slurm -t {args.test_chr} -v {args.val_chr} {hic_filename}")
+execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/train_hicdiffusion.log train_hicdiffusion.slurm -t {args.test_chr} -v {args.val_chr} -m models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/best_val_loss_encoder_decoder.ckpt {hic_filename}")

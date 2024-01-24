@@ -7,7 +7,6 @@ import cooler
 class HiCDataset():
     def __init__(self, hic_file_name, res):
         self.hic_dataset = cooler.Cooler(f"{hic_file_name}::/resolutions/{res}")
-        print(self.hic_dataset.info)
 
     def get(self, chromosome, start, window = 2097152, res = 10000):
-        return self.hic_dataset.matrix(field="count", balance=None).fetch(f"{chromosome}:{start}-{start+window}", f"{chromosome}:{start}-{start+window}")
+        return np.log(self.hic_dataset.matrix(field="count", balance=None).fetch(f"{chromosome}:{start}-{start+window}")+1)

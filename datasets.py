@@ -27,7 +27,7 @@ class GenomicDataSet(Dataset):
         for chromosome in chromosomes:
             if(hic_file_name == ""):
                 self.hic_dataset[chromosome] = comparison_datasets.HiComparison()
-                self.hic_dataset[chromosome].load("hic/%s.npz" % chromosome)
+                self.hic_dataset[chromosome].load("hic_4DNFIXVAKX9Q_npy_no_balance/%s.npz" % chromosome)
             else:
                 self.hic_dataset[chromosome] = hic_dataset_full
                 

@@ -34,9 +34,13 @@ print()
 
 
 hic_filename = args.file
-if(hic_filename != ""):
+if not(hic_filename is None):
     filename_prefix = "_"+hic_filename
 else:
     filename_prefix = ""
-
-execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/test_hicdiffusion.log test_hicdiffusion.slurm -t {args.test_chr} -v {args.val_chr} -m models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/best_val_loss_hicdiffusion.ckpt -f {hic_filename}")
+if not(hic_filename is None):
+    hic_filename = f"-f {hic_filename}"
+else:
+    hic_filename = ""
+    
+execute_command(f"sbatch --dependency=singleton --job-name=HiCDiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr} --output=models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/test_hicdiffusion.log test_hicdiffusion.slurm -t {args.test_chr} -v {args.val_chr} -m models/hicdiffusion{filename_prefix}_test_{args.test_chr}_val_{args.val_chr}/best_val_loss_hicdiffusion.ckpt {hic_filename}")
