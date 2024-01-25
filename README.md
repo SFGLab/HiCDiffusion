@@ -56,6 +56,7 @@ Parameters for the default pipeline (as well as ALL the other training scripts) 
 
 Short option | Long option | Description
 -------------- | --------------- | ---------------
+-f | --hic_filename | .mcool file that will be used as the dataset. Without this parameter, you need data from the C.Origami paper (it will try to perform a comparison based on their data).
 -t | --test_chr | Test chromosome that the pipeline will use only for the testing in last stage.
 -v | --val_chr | Validation chromosome that the pipeline will use for determining best model (based on loss on val set). It is not used in training.
 
