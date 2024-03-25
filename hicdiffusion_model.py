@@ -5,13 +5,17 @@ import torch
 from lightning.pytorch.utilities import grad_norm
 import matplotlib.pyplot as plt
 import matplotlib
-from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef, SpearmanCorrCoef, CosineSimilarity, ConcordanceCorrCoef, RelativeSquaredError
+from torchmetrics.regression import MeanAbsoluteError, MeanAbsolutePercentageError, MeanSquaredError, R2Score, PearsonCorrCoef, SpearmanCorrCoef, ConcordanceCorrCoef, RelativeSquaredError
 from torchmetrics.image import PeakSignalNoiseRatio, UniversalImageQualityIndex, ErrorRelativeGlobalDimensionlessSynthesis, MultiScaleStructuralSimilarityIndexMeasure, PeakSignalNoiseRatioWithBlockedEffect, RelativeAverageSpectralError, RootMeanSquaredErrorUsingSlidingWindow, SpectralDistortionIndex, StructuralSimilarityIndexMeasure, VisualInformationFidelity
 from torchmetrics import MetricCollection
 from denoise_model import UnetConditional, GaussianDiffusionConditional
 from hicdiffusion_encoder_decoder_model import HiCDiffusionEncoderDecoder
 from torchmetrics.image.fid import FrechetInceptionDistance
 import os
+import hicreppy.hicrep as hcr
+import numpy as np
+from scipy import sparse
+import hicreppy.utils.mat_process as cu
 
 def normalize(A):
     A = A.view(-1, 256, 256)
@@ -80,7 +84,7 @@ class HiCDiffusion(pl.LightningModule):
         )
 
 
-        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef(), SpearmanCorrCoef(), CosineSimilarity(), ConcordanceCorrCoef(), RelativeSquaredError(), R2Score()
+        metrics = MetricCollection([ MeanAbsoluteError(), MeanAbsolutePercentageError(), MeanSquaredError(), PearsonCorrCoef(), SpearmanCorrCoef(), ConcordanceCorrCoef(), RelativeSquaredError(), R2Score()
         ])
         metrics_image = MetricCollection([ PeakSignalNoiseRatio(),  UniversalImageQualityIndex(), ErrorRelativeGlobalDimensionlessSynthesis(), MultiScaleStructuralSimilarityIndexMeasure(), PeakSignalNoiseRatioWithBlockedEffect(), RelativeAverageSpectralError(), RootMeanSquaredErrorUsingSlidingWindow(), SpectralDistortionIndex(), StructuralSimilarityIndexMeasure(), VisualInformationFidelity()
         ])
@@ -125,7 +129,7 @@ class HiCDiffusion(pl.LightningModule):
         self.fid_cond = FrechetInceptionDistance(feature=64, normalize=True).to(0)
 
     def on_test_epoch_end(self):
-        self.logger.log_table(key="pearson", columns=["pos", "pearson"], data=self.pearson_table)
+        self.logger.log_table(key="pearson", columns=["pos", "pearson", "scc", "scc_cond"], data=self.pearson_table)
         self.log("fid", self.fid.compute())
         self.log("fid_cond", self.fid_cond.compute())
         
@@ -218,7 +222,10 @@ class HiCDiffusion(pl.LightningModule):
         for i in range(0, x.shape[0]):
             pearson = PearsonCorrCoef().to(y.device)
             pearson_calculated = pearson(y_pred[i].view(-1), y[i].view(-1))
-            self.pearson_table.append([pos[1][i].item(), pearson_calculated.item()])
+            scc = hcr.get_scc(cu.smooth(sparse.csr_matrix(np.array(y_pred[i].view(256, 256).cpu())), 2), cu.smooth(sparse.csr_matrix(np.array(y[i].view(256, 256).cpu())), 2), 16)
+            scc_cond = hcr.get_scc(cu.smooth(sparse.csr_matrix(np.array(y_cond_decoded[i].view(256, 256).cpu())), 2), cu.smooth(sparse.csr_matrix(np.array(y[i].view(256, 256).cpu())), 2), 16)
+            
+            self.pearson_table.append([pos[1][i].item(), pearson_calculated.item(), scc, scc_cond])
             
             create_image(f"models/hicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
             example_name = "example_%s_%s" % (self.test_chr, str(pos[1][i].item()))
