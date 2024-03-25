@@ -6,6 +6,9 @@ import glob, os
 from torchmetrics.regression import PearsonCorrCoef
 import pandas as pd
 from torchmetrics.image.fid import FrechetInceptionDistance
+import hicreppy.hicrep as hcr
+from scipy import sparse
+import hicreppy.utils.mat_process as cu
 
 normal_chromosomes = ["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]
 
@@ -32,20 +35,23 @@ class DatasetWrapper():
         self.comparison_dataset = {}
         for chromosome in normal_chromosomes:
             self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
-            self.comparison_dataset[chromosome].load("../hic/%s.npz" % chromosome)
+            self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
     def get_real_y(self, chromosome, pos):
         return resize(torch.Tensor(self.comparison_dataset[chromosome].get(pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
 
 dataset_wrapper = DatasetWrapper()
 fid_dict = {}
-
 for chromosome in normal_chromosomes:
     pearson_results = []
+    hcr_results = []
     fid = FrechetInceptionDistance(feature=64, normalize=True)
-    for file in glob.glob(f"out/gm12878/prediction/npy/{chromosome}_*.npy"):
-        pos = int(file.split(f"out/gm12878/prediction/npy/{chromosome}_")[1].split(".npy")[0])
+    for file in glob.glob(f"scripts/out/gm12878/prediction/npy/{chromosome}_*.npy"):
+        pos = int(file.split(f"scripts/out/gm12878/prediction/npy/{chromosome}_")[1].split(".npy")[0])
         y_predicted = torch.tensor(np.load(file))
         y_real = torch.Tensor(dataset_wrapper.get_real_y(chromosome, pos))
+
+        y_predicted_np = np.load(file)
+        y_real_np = np.array(dataset_wrapper.get_real_y(chromosome, pos))
 
         fid.update(normalize(y_predicted).repeat(1, 3, 1, 1), real=False)
         fid.update(normalize(y_real).repeat(1, 3, 1, 1), real=True)
@@ -62,9 +68,12 @@ for chromosome in normal_chromosomes:
         pearson = PearsonCorrCoef()
         pearson_calculated = pearson(y_predicted, y_real)
         pearson_results.append((pos, pearson_calculated.item()))
+        hcr_results.append((pos, hcr.get_scc(cu.smooth(sparse.csr_matrix(y_predicted_np), 2), cu.smooth(sparse.csr_matrix(y_real_np), 2), 16)))
     df = pd.DataFrame(pearson_results, columns =['pos', 'pearson'])
-    df.to_csv(f"results_csv/corigami/{chromosome}.csv", index=False)
+    df2 = pd.DataFrame(hcr_results, columns =['pos', 'scc'])
+    df = df.merge(df2, on="pos")
+    df.to_csv(f"scripts/results_csv/corigami/{chromosome}.csv", index=False)
     fid_dict[chromosome] = fid.compute().item()
 
 df_fid = pd.DataFrame.from_dict(fid_dict, orient='index', columns=['fid'])
-df_fid.to_csv("results_csv/corigami_results.csv")
+df_fid.to_csv("scripts/results_csv/corigami_results.csv")
