@@ -22,3 +22,5 @@ models/
 scripts/results_csv/
 scripts/out/
 *mcool
+out/
+out_epi/
