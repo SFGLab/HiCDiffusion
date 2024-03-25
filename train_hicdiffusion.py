@@ -28,7 +28,7 @@ def main(val_chr, test_chr, encoder_decoder_model, hic_filename=""):
     )
     genomic_data_module = datasets.GenomicDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000, batch_size, [val_chr], [test_chr], hic_filename)
 
-    model = HiCDiffusion(predictions_validation, encoder_decoder_model, val_chr, test_chr)
+    model = HiCDiffusion(filename_prefix, predictions_validation, encoder_decoder_model, val_chr, test_chr)
 
     logger = WandbLogger(project=f"HiCDiffusion{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
     trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback_best], max_epochs=100, num_sanity_val_steps=1, accumulate_grad_batches=2)
