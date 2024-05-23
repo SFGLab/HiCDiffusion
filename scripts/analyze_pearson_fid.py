@@ -21,7 +21,7 @@ class DatasetWrapper():
             self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
             self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
     def get_real_y(self, chromosome, pos):
-        return resize(torch.Tensor(self.comparison_dataset[chromosome].get(pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
+        return resize(torch.Tensor(self.comparison_dataset[chromosome].get(chromosome, pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
 
 dataset_wrapper = DatasetWrapper()
 
@@ -155,11 +155,11 @@ axs["COrigami_epi"].set_yticks([])
 axs["Real"].set_yticks([])
 
 
-axs["HiCDiffusion"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
-axs["HiCDiffusionED"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
-axs["COrigami"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5)
-axs["COrigami_epi"].imshow(np.load("scripts/out_epi/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5)
-axs["Real"].imshow(dataset_wrapper.get_real_y("chr8", 8600000), cmap=color_map, vmin=0, vmax=5)
+axs["HiCDiffusion"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
+axs["HiCDiffusionED"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
+axs["COrigami"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5)
+axs["COrigami_epi"].imshow(np.load("scripts/out_epi/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5)
+axs["Real"].imshow(dataset_wrapper.get_real_y("chr8", 21100000), cmap=color_map, vmin=0, vmax=5)
 
 df_avg_fid = pd.DataFrame.from_dict(average_fid, orient="index", columns=["FID"])
 df_avg_fid["Model"] = df_avg_fid.index
