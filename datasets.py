@@ -71,9 +71,9 @@ class GenomicDataSet(Dataset):
         self.windows = self.windows[self.windows["End"]-self.windows["Start"] == window_size]
         #self.windows = self.windows[(self.windows["Start"] == 130380000) | (self.windows["Start"] == 20100000)]
         #to_check = set([29100000, 19600000, 26100000, 36100000, 41600000, 71880000, 96380000, 96880000, 97380000, 123380000, 134380000])
-        to_check = set([29100000, 123380000])
+        # to_check = set([29100000, 123380000])
         
-        self.windows = self.windows[(self.windows["Start"].isin(to_check))]
+        # self.windows = self.windows[(self.windows["Start"].isin(to_check))]
 
     def __len__(self):
         return len(self.windows)
