@@ -63,9 +63,9 @@ def loops_value(params1, params2):
     plt.savefig(f"{file_name}.svg", dpi=400)
     plt.cla()
 
-def test_pixel(value, width, i, j):
-    enrichment = 1.5
-    if(value[i,j] < 12):
+def test_pixel(value, width, i, j, mini):
+    enrichment = 1.2
+    if(value[i,j] < mini*0.75):
         return False
     # left-right
     left = value[i-width:i,j]
@@ -104,11 +104,12 @@ def join_pair(loops):
 def get_loops(value):
     width = 25
     loops = set()
+    mini = np.mean(value)
     for i in range(width, value.shape[0]-width+1):
         for j in range(width, value.shape[0]-width+1):
             if(i <= j+width):
                 continue
-            if(test_pixel(value, width, i, j)):
+            if(test_pixel(value, width, i, j, mini)):
                 loops.add((i, j))
     while join_pair(loops):
         pass
@@ -144,6 +145,7 @@ def main():
         loops_real = get_loops(np.exp(v_real))
 
         parameters = (v_pred, v_real, loops_predicted, loops_real, value[0][0][0], int(value[0][1][0]), int(value[0][2][0]))
+        #loops_value(parameters, parameters)
         to_plot.append(parameters)
         pass
     loops_value(to_plot[0], to_plot[1])

@@ -43,8 +43,8 @@ for i in range(0, 5):
         if(axs["Row"+str(i+1)].legend_ is not None):
             axs["Row"+str(i+1)].legend_.remove()
 axs["Extra"].axis('off')
-plt.savefig("fig4_sup.svg")
-plt.savefig("fig4_sup.png")
+plt.savefig("SupFigure4.svg")
+plt.savefig("SupFigure4.png")
 plt.close()
 
 fig = plt.figure(figsize=(12, 12), constrained_layout=True)
@@ -70,5 +70,5 @@ axs["Diff"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_21100000.npy
 
 sns.violinplot(data=df, x="Metric", y="Value", density_norm="count", cut=0, ax=axs["Corr"], legend=False, palette="rocket")
 axs["Corr"].set_xlabel("")
-plt.savefig("fig7.svg")
-plt.savefig("fig7.png")
+plt.savefig("Figure7.svg")
+plt.savefig("Figure7.png")
