@@ -28,20 +28,15 @@ And get the hic folder to the main folder of the software. You should also get r
 
 ## Requirements
 
-Requirements:
-* torch
-* lightning
-* wandb
-* torchvision
-* pandas
-* numpy
-* denoising_diffusion_pytorch (https://github.com/lucidrains/denoising-diffusion-pytorch/tree/main)
-* biopython
-* pyranges
-* scikit-image
-* scipy
-* hicstraw
-
+The requirements are listed in requirements.txt. You can install a new environment using command:
+```
+conda create --name hicdiffusion -c conda-forge python=3.11
+```
+And then activate the environment & install the requirements using:
+```
+conda activate hicdiffusion
+pip install -r requirements.txt
+```
 
 The full way of training can be done using the following command:
 ```

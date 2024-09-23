@@ -37,7 +37,7 @@ class DatasetWrapper():
             self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
             self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
     def get_real_y(self, chromosome, pos):
-        return resize(torch.Tensor(self.comparison_dataset[chromosome].get(pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
+        return resize(torch.Tensor(self.comparison_dataset[chromosome].get(chromosome, pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
 
 dataset_wrapper = DatasetWrapper()
 fid_dict = {}

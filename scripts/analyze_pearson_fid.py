@@ -21,19 +21,19 @@ class DatasetWrapper():
             self.comparison_dataset[chromosome] = comparison_datasets.HiComparison()
             self.comparison_dataset[chromosome].load("hic/%s.npz" % chromosome)
     def get_real_y(self, chromosome, pos):
-        return resize(torch.Tensor(self.comparison_dataset[chromosome].get(pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
+        return resize(torch.Tensor(self.comparison_dataset[chromosome].get(chromosome, pos-int(length_to_input/2), window_size+int(length_to_input/2), output_res)).to(torch.float), (size_img, size_img), anti_aliasing=True)
 
 dataset_wrapper = DatasetWrapper()
 
 list_of_dfs = []
-for i in range(1, 23):
-    chr_df = pd.read_csv(f"scripts/results_csv/hicdiffusion/chr{i}.csv")
-    chr_df["chr"] = f"Chr{i}"
-    chr_df["Model"] = "HiCDiffusion"
-    chr_df = chr_df.dropna()
-    #q = chr_df["pearson"].quantile(0.01)
-    #chr_df = chr_df[chr_df["pearson"] > q]
-    list_of_dfs.append(chr_df)
+
+chr_df = pd.read_csv(f"scripts/results_csv/hicdiffusion.csv")
+chr_df["chr"] = chr_df["chr"].str.capitalize()
+chr_df["Model"] = "HiCDiffusion"
+chr_df = chr_df.dropna()
+#q = chr_df["pearson"].quantile(0.01)
+#chr_df = chr_df[chr_df["pearson"] > q]
+list_of_dfs.append(chr_df)
 # TO CHANGE TO CORIGAMI
 for i in range(1, 23):
     chr_df = pd.read_csv(f"scripts/results_csv/corigami/chr{i}.csv")
@@ -73,6 +73,7 @@ for i in range(0, 6):
             axs["Row"+str(i+1)].legend_.remove()
 axs["Extra"].axis('off')
 plt.savefig("fig3_pearson_sup.svg")
+plt.savefig("fig3_pearson_sup.png")
 plt.close()
 
 fig = plt.figure(figsize=(8, 14), constrained_layout=True)
@@ -91,6 +92,7 @@ for i in range(0, 6):
             axs["Row"+str(i+1)].legend_.remove()
 axs["Extra"].axis('off')
 plt.savefig("fig3_scc_sup.svg")
+plt.savefig("fig3_scc_sup.png")
 plt.close()
 
 average_fid = {}
@@ -129,6 +131,7 @@ for i in range(0, 6):
         axs["Row"+str(i+1)].legend_.remove()
 axs["Extra"].axis('off')
 plt.savefig("fig3_fid_sup.svg")
+plt.savefig("fig3_fid_sup.png")
 plt.close()
 
 fig = plt.figure(figsize=(12, 24), constrained_layout=True)
@@ -155,11 +158,11 @@ axs["COrigami_epi"].set_yticks([])
 axs["Real"].set_yticks([])
 
 
-axs["HiCDiffusion"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
-axs["HiCDiffusionED"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
-axs["COrigami"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5)
-axs["COrigami_epi"].imshow(np.load("scripts/out_epi/gm12878/prediction/npy/chr8_8600000.npy"), cmap=color_map, vmin=0, vmax=5)
-axs["Real"].imshow(dataset_wrapper.get_real_y("chr8", 8600000), cmap=color_map, vmin=0, vmax=5)
+axs["HiCDiffusion"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
+axs["HiCDiffusionED"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5) #manually add it
+axs["COrigami"].imshow(np.load("scripts/out/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5)
+axs["COrigami_epi"].imshow(np.load("scripts/out_epi/gm12878/prediction/npy/chr8_21100000.npy"), cmap=color_map, vmin=0, vmax=5)
+axs["Real"].imshow(dataset_wrapper.get_real_y("chr8", 21100000), cmap=color_map, vmin=0, vmax=5)
 
 df_avg_fid = pd.DataFrame.from_dict(average_fid, orient="index", columns=["FID"])
 df_avg_fid["Model"] = df_avg_fid.index
@@ -169,9 +172,13 @@ axs["FID"].set_title("Fréchet inception distance")
 
 sns.violinplot(data=df, x="Model", y="Correlation", density_norm="count", cut=0, ax=axs["Pearson"], legend=False, palette="rocket")
 sns.violinplot(data=df, x="Model", y="SCC", density_norm="count", cut=0, ax=axs["SCC"], legend=False, palette="rocket")
+
+
 axs["Pearson"].set_title("Correlation")
 axs["SCC"].set_title("SCC")
 axs["FID"].tick_params(axis='x', rotation=30)
 axs["Pearson"].tick_params(axis='x', rotation=30)
 axs["SCC"].tick_params(axis='x', rotation=30)
 plt.savefig("fig3.svg")
+plt.savefig("fig3.png")
+

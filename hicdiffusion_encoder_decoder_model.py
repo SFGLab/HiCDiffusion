@@ -41,7 +41,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.conv_blocks = nn.ModuleList([])
         
-        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=8, batch_first=True)
 
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=8)
         self.relu = nn.ReLU()
@@ -62,12 +62,13 @@ class Encoder(nn.Module):
     def forward(self, x):
         for block in self.conv_blocks:
             x = block(x)
-
+        x = torch.transpose(x, 1, 2)
         res_transformer = x
 
         x = self.transformer_encoder(x)
 
         x = self.relu(x+res_transformer)
+        x = torch.transpose(x, 1, 2)
 
         x = self.repeat_dimension(x)
         
