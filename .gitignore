@@ -21,9 +21,9 @@ models/
 scripts/results_csv/
 scripts/out/
 *mcool
+scripts/out_epi/
 results_csv/
 scripts/out/
-scripts/out_epi/
 TADbit-master
 tads/
 loops/

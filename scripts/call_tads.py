@@ -149,7 +149,7 @@ def main():
         avg_pearson_n += 1
         print(f"Pearson:{pearson}, average pearson so far {avg_pearson/avg_pearson_n}")
         pearsons.append([f"{value[0][0][0]}_{int(value[0][1])}_{int(value[0][2])}", pearson])
-        if(int(value[0][1]) == 20100000 or int(value[0][1]) == 130380000):
+        if(int(value[0][1]) == 20100000 or int(value[0][1]) == 88880000):
             to_plot.append((value[1][0][0], value[3][0][0], borders1, borders2, value[0][0][0], int(value[0][1][0]), int(value[0][2][0]), insc1, insc2))
         tads_value((value[1][0][0], value[3][0][0], borders1, borders2, value[0][0][0], int(value[0][1][0]), int(value[0][2][0]), insc1, insc2), 
             (value[1][0][0], value[3][0][0], borders1, borders2, value[0][0][0], int(value[0][1][0]), int(value[0][2][0]), insc1, insc2),

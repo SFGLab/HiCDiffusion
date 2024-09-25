@@ -234,7 +234,22 @@ class HiCDiffusion(pl.LightningModule):
         #     example_name = "example_%s_%s" % (str(pos[0][i]), str(pos[1][i].item()))
         #     self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (f"models/nhicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", "final", str(pos[0][i]), str(pos[1][i].item()))])
 
+    def forward(self, x):
 
+        y_cond = self.encoder_decoder.encoder(x)
+        y_cond = self.encoder_decoder.decoder(y_cond)
+        y_cond_decoded = self.encoder_decoder.reduce_layer(y_cond)
+        y_cond_decoded = y_cond_decoded.view(-1, size_img, size_img)
+        
+        y_cond = y_cond.view(-1, 512, size_img, size_img)
+        
+        y_pred = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond, return_all_timesteps=False) # (1, 1, 256, 256)
+        y_pred = y_pred+y_cond_decoded.view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
+        
+        y_cond_decoded = y_cond_decoded.view(-1, 1, size_img, size_img)
+        
+        return y_pred
+    
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
         
