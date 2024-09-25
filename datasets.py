@@ -11,12 +11,15 @@ from scipy.ndimage.filters import gaussian_filter
 import comparison_datasets
 import hic_dataset
 from skimage.transform import resize
+from collections import defaultdict
 
 window_size = 2_000_000
 output_res = 10_000 # IT HAS TO BE ALSO RES OF BEDPE!!!
 unwanted_chars = "U|R|Y|K|M|S|W|B|D|H|V|N|u|r|y|k|m|s|w|b|d|h|v|n"
 num_workers_loader = 8 # in case of .hic, each loader uses around 16GB ram
 size_img = 256
+
+
 
 class GenomicDataSet(Dataset):
     def __init__(self, reference_genome_file, bed_exclude, chromosomes, slide_size, normal_chromosomes, hic_file_name=""):
@@ -91,7 +94,6 @@ class GenomicDataSet(Dataset):
         sequence_list_int = list(map(int, sequence_list))
         sequence_encoding = Fun.one_hot(torch.Tensor(sequence_list_int).to(torch.int64), 5).to(torch.float)
         return torch.transpose(sequence_encoding, 0, 1)
-    
 
 class GenomicDataModule(pl.LightningDataModule):
     def __init__(self, reference_genome_file, bed_exclude, slide_size = 500_000, batch_size: int = 4, val_chr = ["chr9"], test_chr = ["chr8"], hic_file_name="", normal_chromosomes=["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]):
@@ -121,3 +123,59 @@ class GenomicDataModule(pl.LightningDataModule):
     
     def val_dataloader(self):
         return DataLoader(self.genomic_val, batch_size=self.batch_size, num_workers=num_workers_loader, shuffle=False)
+
+class PeakDataset():
+    def __init__(self):
+        peaks_df = pd.read_csv("GSE63525_GM12878_subcompartments.bed", sep="\t", header=None, usecols=[*range(0, 4)], names=["Chromosome", "Start", "End", "Subcompartment"])
+        self.peaks = pr.PyRanges(peaks_df)
+
+    def get(self, chromosome, start, window = 2000000, res = 100000):
+        starts = [*range(start, start+window, res)]
+        ends = [x + res for x in starts]
+        chr_df = pd.DataFrame({"Chromosome": [chromosome]*len(starts), "Start": starts, "End": ends})
+        rows_subcomp = []
+        for i, row in chr_df.iterrows():
+            row_pr = pr.PyRanges(pd.DataFrame(row).T)
+            class_candidates = self.peaks.intersect(row_pr).df
+            class_dict = defaultdict(int)
+            for j, candidate_row in class_candidates.iterrows():
+                if(candidate_row["Subcompartment"][0] == "A"):
+                    comp = 'A'
+                elif(candidate_row["Subcompartment"][0] == "B"):
+                    comp = 'B'
+                else:
+                    raise Exception("NA compartment in the data! Exclude them all.")
+                class_dict[comp] += candidate_row["End"]-candidate_row["Start"]
+            all_in_row = sum(class_dict.values())
+            if(all_in_row < res//2):
+                subcomp = 0
+            else:
+                subcomp = max(class_dict, key=class_dict.get)
+            rows_subcomp.append(subcomp)
+        return [0 if x == "A" else 1 for x in rows_subcomp]
+    
+class FeatureDataSet(GenomicDataSet):
+    def __init__(self, reference_genome_file, bed_exclude, chromosomes, slide_size, normal_chromosomes, hic_file_name=""):
+        super().__init__(reference_genome_file, "exclude_regions_comp.bed", chromosomes, slide_size, normal_chromosomes, hic_file_name="")
+        self.peaks_dataset = PeakDataset()
+
+    def __getitem__(self, idx):
+        window = self.windows.iloc[idx]
+        length_to_input = 97152 # correction for input to network - easier to ooperate whith maxpooling when ^2
+        sequence = self.chr_seq[window["Chromosome"]][window["Start"]-int(length_to_input/2):window["End"]+int(length_to_input/2)]
+        return self.sequence_to_onehot(sequence), torch.Tensor(self.peaks_dataset.get(window["Chromosome"], window["Start"], window_size, 100_000)).to(torch.float), [window["Chromosome"], window["Start"], window["End"]]    
+
+class FeatureDataModule(GenomicDataModule):
+    def __init__(self, reference_genome_file, bed_exclude, slide_size = 500_000, batch_size: int = 4, val_chr = ["chr9"], test_chr = ["chr8"], hic_file_name="", normal_chromosomes=["chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8", "chr9", "chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"]):
+        super().__init__(reference_genome_file, bed_exclude, slide_size, batch_size, val_chr, test_chr, hic_file_name, normal_chromosomes)
+    def setup(self, stage=None):
+        self.genomic_train = FeatureDataSet(self.reference_genome_file, self.bed_exclude, [x for x in self.normal_chromosomes if x not in self.val_chr+self.test_chr], self.slide_size, self.normal_chromosomes, self.hic_file_name)
+        self.genomic_val = FeatureDataSet(self.reference_genome_file, self.bed_exclude, self.val_chr, self.slide_size, self.normal_chromosomes, self.hic_file_name)
+        self.genomic_test = FeatureDataSet(self.reference_genome_file, self.bed_exclude, self.test_chr, self.slide_size, self.normal_chromosomes, self.hic_file_name)
+    
+
+if __name__ == "__main__":
+    #genomic_data_module = FeatureDataModule("GRCh38_full_analysis_set_plus_decoy_hla.fa", "exclude_regions.bed", 500_000)
+    #genomic_data_module.setup()
+    z = PeakDataset()
+    z.get("chr5", 138_000_000)
