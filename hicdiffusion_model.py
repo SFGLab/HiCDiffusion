@@ -65,6 +65,8 @@ class HiCDiffusion(pl.LightningModule):
         
         self.save_hyperparameters()
         self.hic_filename = hic_filename
+        if(self.hic_filename != ""):
+            self.hic_filename = "_"+self.hic_filename
         self.validation_folder = validation_folder
         
         self.encoder_decoder = HiCDiffusionEncoderDecoder.load_from_checkpoint(encoder_decoder_model)
@@ -149,7 +151,7 @@ class HiCDiffusion(pl.LightningModule):
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, batch_size=x.shape[0], sync_dist=True)
         
         # every 10 epoch - log statistics, which means generating all the images
-        if(self.current_epoch % 10 == 9):
+        if(self.current_epoch % 5 == 4):
             y_pred = self.diffusion.sample(batch_size = y_cond.shape[0], x_self_cond=y_cond, return_all_timesteps=False) # (1, 1, 256, 256)
             y_pred = nn.functional.relu(y_pred+y_cond_decoded.view(-1, 1, size_img, size_img)) # the y_pred is in form of y - y_cond
             
@@ -218,21 +220,36 @@ class HiCDiffusion(pl.LightningModule):
         self.fid_cond.update(normalize(y).repeat(1, 3, 1, 1), real=True)
         self.log_dict(self.valid_metrics_cond_image(y_cond_decoded, y), sync_dist=True, on_epoch=True, batch_size=x.shape[0])
         
+        # temporary - just stats
+        # # log sample images
+        # for i in range(0, x.shape[0]):
+        #     pearson = PearsonCorrCoef().to(y.device)
+        #     pearson_calculated = pearson(y_pred[i].view(-1), y[i].view(-1))
+        #     scc = hcr.get_scc(cu.smooth(sparse.csr_matrix(np.array(y_pred[i].view(256, 256).cpu())), 2), cu.smooth(sparse.csr_matrix(np.array(y[i].view(256, 256).cpu())), 2), 16)
+        #     scc_cond = hcr.get_scc(cu.smooth(sparse.csr_matrix(np.array(y_cond_decoded[i].view(256, 256).cpu())), 2), cu.smooth(sparse.csr_matrix(np.array(y[i].view(256, 256).cpu())), 2), 16)
             
-        # log sample images
-        for i in range(0, x.shape[0]):
-            pearson = PearsonCorrCoef().to(y.device)
-            pearson_calculated = pearson(y_pred[i].view(-1), y[i].view(-1))
-            scc = hcr.get_scc(cu.smooth(sparse.csr_matrix(np.array(y_pred[i].view(256, 256).cpu())), 2), cu.smooth(sparse.csr_matrix(np.array(y[i].view(256, 256).cpu())), 2), 16)
-            scc_cond = hcr.get_scc(cu.smooth(sparse.csr_matrix(np.array(y_cond_decoded[i].view(256, 256).cpu())), 2), cu.smooth(sparse.csr_matrix(np.array(y[i].view(256, 256).cpu())), 2), 16)
+        #     self.pearson_table.append([pos[0][i], pos[1][i].item(), pearson_calculated.item(), scc, scc_cond])
             
-            self.pearson_table.append([pos[0][i], pos[1][i].item(), pearson_calculated.item(), scc, scc_cond])
-            
-            create_image(f"models/hicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
-            example_name = "example_%s_%s" % (str(pos[0][i]), str(pos[1][i].item()))
-            self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (f"models/hicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", "final", str(pos[0][i]), str(pos[1][i].item()))])
+        #     create_image(f"models/nhicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", y_pred[i].view(256, 256).cpu(), y_cond_decoded[i].view(256, 256).cpu(), y[i].view(256, 256).cpu(), "final", pos[0][i], pos[1][i].item())
+        #     example_name = "example_%s_%s" % (str(pos[0][i]), str(pos[1][i].item()))
+        #     self.logger.log_image(key = example_name, images=["%s/%s_%s_%s.png" % (f"models/nhicdiffusion{self.hic_filename}_test_{self.test_chr}_val_{self.val_chr}/predictions_test", "final", str(pos[0][i]), str(pos[1][i].item()))])
 
+    def forward(self, x):
 
+        y_cond = self.encoder_decoder.encoder(x)
+        y_cond = self.encoder_decoder.decoder(y_cond)
+        y_cond_decoded = self.encoder_decoder.reduce_layer(y_cond)
+        y_cond_decoded = y_cond_decoded.view(-1, size_img, size_img)
+        
+        y_cond = y_cond.view(-1, 512, size_img, size_img)
+        
+        y_pred = self.diffusion.sample(batch_size = 1, x_self_cond=y_cond, return_all_timesteps=False) # (1, 1, 256, 256)
+        y_pred = y_pred+y_cond_decoded.view(-1, 1, size_img, size_img) # the y_pred is in form of y - y_cond
+        
+        y_cond_decoded = y_cond_decoded.view(-1, 1, size_img, size_img)
+        
+        return y_pred
+    
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         loss, x, y, y_cond, y_cond_decoded, pos = self.process_batch(batch)
         
