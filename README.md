@@ -28,6 +28,7 @@ To test the software using data from C.Origami, download the data from there:
 https://zenodo.org/record/7226561/files/corigami_data_gm12878_add_on.tar.gz?download=1
 And get the hic folder to the main folder of the software. You should also get reference genome and put it into the main folder, e.g., GRCh38_full_analysis_set_plus_decoy_hla.fa (which can be obtained from 1000 Genomes project: https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/)
 
+The pretrained HiCDiffusion models (recommended - can be used for predictions with minimal effort, training and testing the model requires configuration of wandb) can be downloaded from zenodo: https://zenodo.org/records/13840733
 
 ## Requirements
 
