@@ -16,7 +16,7 @@ def main(val_chr, test_chr, hic_filename):
         filename_prefix = ""
     pl.seed_everything(1996)
     
-    batch_size = 4
+    batch_size = 2
     
     predictions_validation = "models/hicdiffusion%s_test_%s_val_%s/predictions_encoder_decoder" % (filename_prefix, test_chr, val_chr)
 
@@ -31,15 +31,15 @@ def main(val_chr, test_chr, hic_filename):
 
     model = HiCDiffusionEncoderDecoder(predictions_validation, val_chr, test_chr)
 
-    logger = WandbLogger(project=f"HiCDiffusionEncoderDecoder{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
-    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback_best], max_epochs=100, num_sanity_val_steps=1, accumulate_grad_batches=2)
+    logger = WandbLogger(project=f"XDDDDHiCDiffusionEncoderDecoder{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
+    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback_best], max_epochs=1, num_sanity_val_steps=1, accumulate_grad_batches=2)
     
     if(trainer.global_rank == 0):
         if os.path.exists(predictions_validation) and os.path.isdir(predictions_validation):
             shutil.rmtree(predictions_validation)
             time.sleep(2)
         try:
-            os.mkdir(predictions_validation)
+            os.makedirs(predictions_validation, exist_ok=True)
         except OSError:
             pass
 

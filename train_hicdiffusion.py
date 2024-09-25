@@ -38,7 +38,7 @@ def main(val_chr, test_chr, encoder_decoder_model, hic_filename=""):
             shutil.rmtree(predictions_validation)
             time.sleep(2)
         try:
-            os.mkdir(predictions_validation)
+            os.makedirs(predictions_validation, exist_ok=True)
         except OSError:
             pass
 

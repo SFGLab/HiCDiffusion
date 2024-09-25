@@ -24,14 +24,14 @@ def main(val_chr, test_chr, model_ckpt, hic_filename="", model_ed=None):
     else:
         model = HiCDiffusion.load_from_checkpoint(model_ckpt)
 
-    logger = WandbLogger(project=f"NHiCDiffusionTest{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
+    logger = WandbLogger(project=f"XDNHiCDiffusionTest{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
     trainer = pl.Trainer(logger=logger, callbacks=[ModelSummary(max_depth=2)], devices=1, num_sanity_val_steps=0)
     
     if os.path.exists(test_model_folder) and os.path.isdir(test_model_folder):
         shutil.rmtree(test_model_folder)
         time.sleep(2)
     try:
-        os.mkdir(test_model_folder)
+        os.makedirs(test_model_folder, exist_ok=True)
     except OSError:
         pass
 
