@@ -18,7 +18,7 @@ def main(val_chr, test_chr, hic_filename):
     
     batch_size = 2
     
-    predictions_validation = "models/nhicdiffusion%s_test_%s_val_%s/predictions_encoder_decoder" % (filename_prefix, test_chr, val_chr)
+    predictions_validation = "models/hicdiffusion%s_test_%s_val_%s/predictions_encoder_decoder" % (filename_prefix, test_chr, val_chr)
 
     checkpoint_callback_best = ModelCheckpoint(
         save_top_k=1,
@@ -31,7 +31,7 @@ def main(val_chr, test_chr, hic_filename):
 
     model = HiCDiffusionEncoderDecoder(predictions_validation, val_chr, test_chr)
 
-    logger = WandbLogger(project=f"NHiCDiffusionEncoderDecoder{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
+    logger = WandbLogger(project=f"HiCDiffusionEncoderDecoder{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
     trainer = pl.Trainer(logger=logger, gradient_clip_val=1, callbacks=[ModelSummary(max_depth=2), checkpoint_callback_best], max_epochs=50, num_sanity_val_steps=1, accumulate_grad_batches=2)
     
     if(trainer.global_rank == 0):
