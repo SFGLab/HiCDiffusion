@@ -17,3 +17,4 @@ torchmetrics==1.4.0.post0
 torchvision==0.18.1
 tqdm==4.66.1
 wandb==0.17.1
+torch-fidelity==0.3.0
