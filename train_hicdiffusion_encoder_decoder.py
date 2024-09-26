@@ -18,12 +18,12 @@ def main(val_chr, test_chr, hic_filename):
     
     batch_size = 2
     
-    predictions_validation = "models/hicdiffusion%s_test_%s_val_%s/predictions_encoder_decoder" % (filename_prefix, test_chr, val_chr)
+    predictions_validation = "models/nhicdiffusion%s_test_%s_val_%s/predictions_encoder_decoder" % (filename_prefix, test_chr, val_chr)
 
     checkpoint_callback_best = ModelCheckpoint(
         save_top_k=1,
         monitor="val_loss",
-        dirpath=f"models/hicdiffusion{filename_prefix}_test_{test_chr}_val_{val_chr}/",
+        dirpath=f"models/nhicdiffusion{filename_prefix}_test_{test_chr}_val_{val_chr}/",
         filename="best_val_loss_encoder_decoder",
         mode="min"
     )
@@ -31,8 +31,8 @@ def main(val_chr, test_chr, hic_filename):
 
     model = HiCDiffusionEncoderDecoder(predictions_validation, val_chr, test_chr)
 
-    logger = WandbLogger(project=f"XDDDDHiCDiffusionEncoderDecoder{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
-    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, detect_anomaly=True, callbacks=[ModelSummary(max_depth=2), checkpoint_callback_best], max_epochs=1, num_sanity_val_steps=1, accumulate_grad_batches=2)
+    logger = WandbLogger(project=f"NHiCDiffusionEncoderDecoder{filename_prefix}", log_model=True, name=f"Test: {test_chr}, Val: {val_chr}")
+    trainer = pl.Trainer(logger=logger, gradient_clip_val=1, callbacks=[ModelSummary(max_depth=2), checkpoint_callback_best], max_epochs=50, num_sanity_val_steps=1, accumulate_grad_batches=2)
     
     if(trainer.global_rank == 0):
         if os.path.exists(predictions_validation) and os.path.isdir(predictions_validation):
@@ -43,7 +43,7 @@ def main(val_chr, test_chr, hic_filename):
         except OSError:
             pass
 
-    logger.watch(model, log="all", log_freq=10)
+    logger.watch(model, log="all", log_freq=1)
     
     trainer.fit(model, datamodule=genomic_data_module)
 
