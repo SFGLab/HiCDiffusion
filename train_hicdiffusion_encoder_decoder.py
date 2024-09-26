@@ -23,7 +23,7 @@ def main(val_chr, test_chr, hic_filename):
     checkpoint_callback_best = ModelCheckpoint(
         save_top_k=1,
         monitor="val_loss",
-        dirpath=f"models/nhicdiffusion{filename_prefix}_test_{test_chr}_val_{val_chr}/",
+        dirpath=f"models/hicdiffusion{filename_prefix}_test_{test_chr}_val_{val_chr}/",
         filename="best_val_loss_encoder_decoder",
         mode="min"
     )
