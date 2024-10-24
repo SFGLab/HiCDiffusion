@@ -20,7 +20,7 @@ Diffusion-based, from-sequence Hi-C matrices predictor.
 If you use HiCDiffusion in your research, we kindly ask you to cite the following publication:
 
 ```
-TBD
+Chiliński, M., Plewczynski, D. HiCDiffusion - diffusion-enhanced, transformer-based prediction of chromatin interactions from DNA sequences. BMC Genomics 25, 964 (2024). https://doi.org/10.1186/s12864-024-10885-z
 ```
 ## Data
 
